@@ -1,0 +1,33 @@
+# おためし BTC ボットの設定。
+# [hypothesis] と [cv] はデータを見る前に固定した「仮説」です。
+# ここを変えると hypothesis.lock と合わなくなり、バックテストが止まります（後出しで条件をいじれないようにするため）。
+
+[hypothesis]
+statement = """
+BTC の日足終値が過去 main_lookback 日の単純移動平均より上なら、翌日は BTC を全額保有、下なら現金で待つ。
+手数料とスリッページを引いたあとでも、(1) 偶然では説明できないプラスの成績（デフレーテッド・シャープ比 >= min_dsr）、
+(2) 時期を分けた検証で過半数の期間がプラス、(3) 最大下落率がガチホ（買って持ち続ける）より小さい、の3つを満たす。
+"""
+main_lookback = 100
+variants = [20, 50, 100, 150, 200]   # 試す変種はこれで全部。後から足さない。
+fee_rate = 0.001                     # 片道の手数料 0.1%
+slippage_rate = 0.0005               # 片道のずれ 0.05%
+min_dsr = 0.95
+min_positive_fold_share = 0.67
+
+[cv]
+n_folds = 6
+embargo_days = 200                   # 一番長い移動平均と同じ日数。学習側が検証期間の値段を覗かないように空ける。
+
+[risk]
+max_position_frac = 1.0              # 借金なし。コード側で 1.0 を超えられない。
+daily_loss_limit = 0.05              # 1日で 5% 減ったらその日は手じまい
+max_consecutive_losses = 5           # 5回続けて負けたら停止
+max_drawdown = 0.30                  # 最高値から 30% 減ったら全部手じまいして停止
+stale_data_days = 2                  # 最新の足が 2日より古ければ手じまい
+max_api_errors = 3                   # データ取得が 3回続けて失敗したら停止
+
+[paper]
+symbol = "BTCUSDT"
+initial_cash = 10000.0               # 仮想資金（USD）
+min_trades_for_kill_check = 10       # この回数の売買が終わったら、バックテストとの比較で止めるか判定

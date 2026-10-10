@@ -1,0 +1,36 @@
+name: paper-trade
+on:
+  schedule:
+    - cron: "17 0 * * *"   # 毎日 09:17（日本時間）。日足が確定した後。
+  workflow_dispatch:
+    inputs:
+      kill:
+        description: "true にすると全部手じまいして止める"
+        default: "false"
+permissions:
+  contents: write
+concurrency:
+  group: state-writer
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - if: ${{ inputs.kill == 'true' }}
+        run: python -m btcbot kill
+      - if: ${{ inputs.kill != 'true' }}
+        run: python -m btcbot paper
+      - name: 状態を保存
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state/
+          git diff --cached --quiet && exit 0
+          git commit -m "仮想売買の記録 $(date -u +%F)"
+          git pull --rebase origin main
+          git push origin HEAD:main
