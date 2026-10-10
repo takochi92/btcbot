@@ -113,6 +113,20 @@ canvas{display:block}
 #help{font-family:system-ui,sans-serif;font-size:13px;line-height:1.7;color:var(--text);max-width:760px;margin:18px auto 40px;padding:0 16px}
 #help h2{font-size:16px;margin:16px 0 6px}
 #help code{font-family:var(--mono);font-size:12px;background:var(--panel);padding:1px 5px;border:1px solid var(--line)}
+#hist{font-family:system-ui,sans-serif;max-width:1100px;margin:22px auto 0;padding:0 16px;color:var(--text)}
+#hist h2{font-size:18px;margin-bottom:10px}
+#hsum{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px}
+#hsum div{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+#hsum .k{font-size:11px;color:var(--dim)}#hsum .v{font-size:18px;font-weight:700;font-family:var(--mono);margin-top:2px}
+#hbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
+#hbar button{font:inherit;font-size:13px;padding:5px 12px;background:var(--panel);color:var(--text);border:1px solid var(--line2);border-radius:999px;cursor:pointer}
+#hbar button.on{background:var(--text);color:var(--bg)}
+#hwrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px}
+#htab{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
+#htab th{text-align:left;font-weight:600;color:var(--dim);font-size:11px;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0}
+#htab td{padding:7px 10px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:12px}
+#htab td.n{text-align:right}
+#hmore{margin-top:8px}
 #help button{font:inherit;padding:6px 12px;background:var(--panel);color:var(--text);border:1px solid var(--line2);border-radius:4px;cursor:pointer}
 </style>
 </head>
@@ -247,6 +261,19 @@ canvas{display:block}
   <span>PAPER ONLY · NO REAL MONEY</span><span id="ft-src">PRICES: — · BOOK: —</span><span>MODEL: GBM, σ FROM LAST 60 × 1M CANDLES</span><span id="ft-ver"></span></div>
 </div></div>
 
+<div id="hist">
+  <h2>ポジション履歴（仮想）</h2>
+  <div id="hsum"></div>
+  <div id="hbar">
+    <button data-f="all" class="on">すべて</button><button data-f="open">持ち中</button><button data-f="win">勝ち</button><button data-f="lose">負け</button>
+    <span style="flex:1"></span><button id="hcsv">CSV で保存</button>
+  </div>
+  <div id="hwrap"><table id="htab"><thead><tr>
+    <th>買った時刻</th><th>5分の窓</th><th>向き</th><th class="n">枚数</th><th class="n">買値</th><th class="n">支払い</th><th class="n">予想</th><th class="n">有利さ</th><th>結果</th><th class="n">損益</th>
+  </tr></thead><tbody id="hbody"></tbody></table></div>
+  <div id="hmore"></div>
+</div>
+
 <div id="help">
   <h2>これは何？</h2>
   <p>「5分後に BTC が今より上か下か」に賭ける予測市場（Polymarket の BTC Up or Down 5m）向けのボットを、<b>仮想のお金だけ</b>で動かす画面です。このページを開いている間、ブラウザの中でボットが動きます。</p>
@@ -263,7 +290,7 @@ canvas{display:block}
 
 <script>
 "use strict";
-const CFG={WIN:300,WORLDS:20480,THREADS:2048,STEPS:24,TICK:250,MIN_EDGE:.04,FEE:.01,KELLY:.25,TICKET_CAP:25,WINDOW_CAP:100,COOLDOWN:15,START:1000,MIN_LEFT:15};
+const CFG={WIN:300,WORLDS:20480,THREADS:2048,STEPS:24,TICK:250,MIN_EDGE:.04,FEE:.01,KELLY:.25,TICKET_CAP:25,WINDOW_CAP:100,COOLDOWN:15,START:1000,MIN_LEFT:15,MIN_PRICE:.10,MAX_PRICE:.90,MAX_EDGE:.15};
 const SIM=new URLSearchParams(location.search).has("sim");
 const SYMS=["BTC","ETH","SOL","XRP"],HZ=[[300,"5M"],[900,"15M"],[3600,"1H"]];
 const $=id=>document.getElementById(id);
@@ -282,8 +309,8 @@ const S={px:{},candles:{},ticks:[],book:{bids:[],asks:[]},feed:"connecting",
 SYMS.forEach(s=>{S.px[s]=null;S.candles[s]=[]});
 
 const D={};function diag(k,ok,msg){D[k]={ok,msg,t:hms(now())};const el=$("diag");if(el)el.innerHTML=Object.entries(D).map(([n,v])=>`<div><span class="${v.ok?"up":"down"}">${v.ok?"✓":"✗"}</span> ${n} — ${v.msg} <span class="dim">${v.t}</span></div>`).join("")}
-const KEY="btcbot.paper.v1";
-function freshAcct(){return{cash:CFG.START,tickets:[],hist:[{t:now(),eq:CFG.START}],calib:[],wins:[]}}
+const KEY="btcbot.paper.v2";
+function freshAcct(){return{cash:CFG.START,tickets:[],hist:[{t:now(),eq:CFG.START}],calib:[],wins:[],pend:[]}}
 let A=freshAcct();
 try{const j=JSON.parse(localStorage.getItem(KEY)||"null");if(j&&j.cash!=null)A=j}catch(e){}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(A))}catch(e){}}
@@ -388,22 +415,45 @@ async function pollBook(){
 /* ---------- windows, model, trading ---------- */
 function newWindow(start,ptb,partial){
   S.win={start,ptb,partial,hist:[],calibDone:false};findMarket(start)}
-function settle(w,final){
-  const up=final>w.ptb;let pnl=0,n=0;
+function settle(w,up,final,src){
+  let pnl=0,n=0;
   A.tickets.filter(t=>t.win===w.start&&!t.settled).forEach(t=>{const won=(t.side==="UP")===up;
-    t.settled=true;t.won=won;t.pnl=(won?t.shares:0)-t.stake-t.fee;A.cash+=won?t.shares:0;pnl+=t.pnl;n++});
-  A.wins.push({start:w.start,up,ptb:w.ptb,final,pnl,n});if(A.wins.length>500)A.wins.shift();
+    t.settled=true;t.won=won;t.src=src;t.pnl=(won?t.shares:0)-t.stake-t.fee;A.cash+=won?t.shares:0;pnl+=t.pnl;n++});
+  A.wins.push({start:w.start,up,ptb:w.ptb,final,pnl,n,src});A.wins.sort((a,b)=>a.start-b.start);if(A.wins.length>500)A.wins.shift();
   A.hist.push({t:now(),eq:equity()});if(A.hist.length>2000)A.hist.shift();
   if(A.tickets.length>3000)A.tickets=A.tickets.slice(-3000);
-  save();S.settleShow={until:now()+5,up,pnl,n}}
+  save();S.settleShow={until:now()+5,up,pnl,n,src}}
 function equity(){return A.cash+A.tickets.filter(t=>!t.settled).reduce((a,t)=>a+t.stake,0)}
+/* settlement: Polymarket's own result first; Binance 1m open at the bell only as a fallback */
+async function binanceOpen(t){const c=openAt("BTC",t);if(c!=null)return c;
+  const r=await fetch(`${REST}?symbol=BTCUSDT&interval=1m&startTime=${t*1000}&limit=1`);const j=await r.json();return j.length&&j[0][0]===t*1000?+j[0][1]:null}
+async function polyResult(start){
+  const slug=`btc-updown-5m-${start}`;let m=null;
+  try{const j=await (await fetch(`https://gamma-api.polymarket.com/markets?slug=${slug}`)).json();m=Array.isArray(j)?j[0]:j}catch(e){}
+  if(!m||!m.outcomePrices){try{const j=await (await fetch(`https://gamma-api.polymarket.com/events?slug=${slug}`)).json();const ev=Array.isArray(j)?j[0]:j;m=ev&&ev.markets&&ev.markets[0]}catch(e){}}
+  if(!m||!m.outcomePrices)return null;
+  const outs=JSON.parse(m.outcomes),pr=JSON.parse(m.outcomePrices).map(Number),iu=outs.findIndex(o=>/up/i.test(o));
+  if(pr[iu]>=.99)return true;if(pr[iu]<=.01)return false;return null}   // not resolved yet
+let settling=false;
+async function settlePending(){
+  if(settling||!A.pend||!A.pend.length)return;settling=true;
+  try{for(const w of A.pend.slice()){const end=w.start+CFG.WIN,age=now()-end;
+    const hasT=A.tickets.some(t=>t.win===w.start&&!t.settled);let up=null,src="",final=null;
+    if(!SIM&&hasT){up=await polyResult(w.start);if(up!=null)src="polymarket"}
+    if(up==null&&(SIM||!hasT||age>900)){final=SIM?w.simFinal:await binanceOpen(end);if(final!=null){up=final>w.ptb;src="binance"}}
+    if(up==null)continue;
+    if(final==null)final=await binanceOpen(end).catch(()=>null);
+    A.pend=A.pend.filter(x=>x.start!==w.start);
+    if(w.partial&&!hasT){save();continue}
+    settle(w,up,final,src)}}
+  catch(e){console.error(e)}finally{settling=false}}
 function rollWindow(){
   const t=now(),start=Math.floor(t/CFG.WIN)*CFG.WIN,p=S.px.BTC;if(!p)return;
-  if(!S.win){const o=openAt("BTC",start);newWindow(start,o??p,o==null);return}
-  if(start>S.win.start){
-    if(S.win.start===start-CFG.WIN)settle(S.win,p);   // settle at the boundary price
-    newWindow(start,p,false)}}
-function simulate(){
+  if(S.win&&start===S.win.start)return;
+  if(S.win){A.pend=A.pend||[];A.pend.push({start:S.win.start,ptb:S.win.ptb,partial:S.win.partial,simFinal:SIM?p:null});save()}
+  // price to beat = the real open of this window. If we woke up late and can't read it, only watch.
+  const o=openAt("BTC",start),fresh=t-start<3&&S.ticks.length&&t-S.ticks.at(-1).t<2;
+  newWindow(start,o??p,o==null&&!fresh)}function simulate(){
   const p=S.px.BTC,w=S.win;if(!p||!w)return;
   const T=Math.max(.5,w.start+CFG.WIN-now()),sig=volPerSec("BTC");
   const sd=sig*Math.sqrt(T),mu=-.5*sd*sd;let up=0;const term=S.term;
@@ -424,6 +474,9 @@ function maybeTrade(T){
   st.cmp=`book ${fmt(mk.askUp*100)}¢, edge ${sgn(edge*100)} ${side.toLowerCase()}`;st.step=2;
   const spent=A.tickets.filter(t=>t.win===w.start).reduce((a,t)=>a+t.stake,0);
   if(w.partial){st.size="joined late, watching only";return}
+  if(document.hidden||!S.ticks.length||now()-S.ticks.at(-1).t>5){st.size="price feed stale, not trading";return}
+  if(edge>CFG.MAX_EDGE){st.size=`edge ${sgn(edge*100)} is too good to be true, skip`;return}
+  if(ask<CFG.MIN_PRICE||ask>CFG.MAX_PRICE){st.size=`ticket ${fmt(ask*100)}¢ is outside ${CFG.MIN_PRICE*100}–${CFG.MAX_PRICE*100}¢`;return}
   if(edge<CFG.MIN_EDGE){st.size="edge too small";return}
   if(T<CFG.MIN_LEFT||T>CFG.WIN-5){st.size="too close to the bell";return}
   if(spent>=CFG.WINDOW_CAP){st.size="window cap reached";return}
@@ -612,7 +665,7 @@ function drawEngine(){
   // settle banner
   const sh=S.settleShow;$("settled").style.display=sh&&t<sh.until?"block":"none";
   if(sh&&t<sh.until){$("st-a").textContent="SETTLED "+(sh.up?"UP":"DOWN");$("st-a").className="a "+(sh.up?"up":"down");
-    $("st-b").textContent=sh.n?`${usd(sh.pnl)} ON THIS WINDOW · ${sh.n} TICKETS`:"NO TICKETS THIS WINDOW"}}
+    $("st-b").textContent=(sh.n?`${usd(sh.pnl)} ON THIS WINDOW · ${sh.n} TICKETS`:"NO TICKETS THIS WINDOW")+" · BY "+(sh.src||"").toUpperCase()}}
 function drawFills(){
   const[x,W,H]=ctx("c-fills"),t=now(),span=1800,X=tt=>12+(1-(t-tt)/span)*(W-150);x.clearRect(0,0,W,H);
   A.wins.filter(w=>w.start>t-span).forEach(w=>{x.fillStyle=w.n?(w.pnl>=0?css("--up"):css("--down")):css("--line2");x.globalAlpha=w.n?.8:.6;
@@ -651,6 +704,35 @@ function drawLand(){
   x.fillStyle=css("--dim");x.font="9px JetBrains Mono";x.fillText(`BEAT $${fmt(w.ptb,0)}`,X(w.ptb)+4,58);x.fillText(`NOW $${fmt(p,0)}`,X(p)+4,70);
   $("l-n").textContent=fmt(S.landed)+" LANDED"}
 
+/* ---------- position history ---------- */
+const jst=t=>new Date(t*1000).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"});
+const jhm=t=>new Date(t*1000).toLocaleTimeString("ja-JP",{timeZone:"Asia/Tokyo",hour:"2-digit",minute:"2-digit"});
+let hFilter="all",hLimit=100;
+document.querySelectorAll("#hbar button[data-f]").forEach(b=>b.onclick=()=>{hFilter=b.dataset.f;hLimit=100;
+  document.querySelectorAll("#hbar button[data-f]").forEach(x=>x.classList.toggle("on",x===b));drawHist.k=null;drawHist()});
+function histRows(){const W={};A.wins.forEach(w=>W[w.start]=w);
+  return A.tickets.slice().reverse().map(t=>({t,w:W[t.win]})).filter(({t})=>hFilter==="all"||(hFilter==="open"?!t.settled:hFilter==="win"?t.settled&&t.won:t.settled&&!t.won))}
+function drawHist(){
+  const key=[A.tickets.length,A.tickets.filter(t=>t.settled).length,hFilter,hLimit,A.cash].join();if(key===drawHist.k)return;drawHist.k=key;
+  const set=A.tickets.filter(t=>t.settled),win=set.filter(t=>t.won).length,pnl=set.reduce((a,t)=>a+t.pnl,0),open=A.tickets.filter(t=>!t.settled);
+  const cell=(k,v,c="")=>`<div><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`;
+  $("hsum").innerHTML=cell("仮想資金",usd(equity(),2))+cell("確定した損益",usd(pnl,2),pnl>=0?"up":"down")+cell("売買回数",fmt(A.tickets.length)+" 回")
+    +cell("勝ち / 負け",`${win} / ${set.length-win}`)+cell("勝率",set.length?fmt(win/set.length*100,1)+"%":"—")+cell("持ち中",open.length+" 件 · "+usd(open.reduce((a,t)=>a+t.stake,0)));
+  const rows=histRows();
+  $("hbody").innerHTML=rows.slice(0,hLimit).map(({t,w})=>{
+    const side=t.side==="UP"?'<span class="up">上</span>':'<span class="down">下</span>';
+    const res=!t.settled?'<span class="dim">持ち中</span>':`${t.won?'<span class="up">勝ち</span>':'<span class="down">負け</span>'}${w?` <span class="dim">${fmt(w.ptb,0)}→${fmt(w.final,0)} · ${t.src==="polymarket"?"Polymarket の結果":"Binance で判定"}</span>`:""}`;
+    return`<tr><td>${jst(t.t)}</td><td>${jhm(t.win)}〜${jhm(t.win+CFG.WIN)}</td><td>${side}</td><td class="n">${fmt(t.shares)}</td><td class="n">${fmt(t.price*100,1)}¢</td>
+      <td class="n">${usd(t.stake+t.fee,2)}</td><td class="n">${fmt((t.side==="UP"?t.model:1-t.model)*100,1)}%</td><td class="n">${sgn(t.edge*100)}</td><td>${res}</td>
+      <td class="n ${!t.settled?"dim":t.pnl>=0?"up":"down"}">${t.settled?usd(t.pnl,2):"—"}</td></tr>`}).join("")
+    ||`<tr><td colspan="10" style="text-align:center;padding:24px;font-family:system-ui" class="dim">まだ売買はありません。Polymarket の板が取れて、有利な値段が出たときに買います。</td></tr>`;
+  $("hmore").innerHTML=rows.length>hLimit?`<button onclick="hLimit+=100;drawHist()" style="font:inherit;padding:6px 12px;background:var(--panel);color:var(--text);border:1px solid var(--line2);border-radius:4px">さらに表示（残り ${rows.length-hLimit} 件）</button>`:""}
+$("hcsv").onclick=()=>{const W={};A.wins.forEach(w=>W[w.start]=w);
+  const head="買った時刻(UTC),窓の開始(UTC),向き,枚数,買値,支払い(手数料込),予想確率,有利さ,結果,基準の値段,終わりの値段,損益\n";
+  const body=A.tickets.map(t=>{const w=W[t.win];return[new Date(t.t*1000).toISOString(),new Date(t.win*1000).toISOString(),t.side==="UP"?"上":"下",t.shares,t.price,(t.stake+t.fee).toFixed(2),
+    (t.side==="UP"?t.model:1-t.model).toFixed(4),t.edge.toFixed(4),t.settled?(t.won?"勝ち":"負け"):"持ち中",w?w.ptb:"",w?w.final:"",t.settled?t.pnl.toFixed(2):""].join(",")}).join("\n");
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+head+body],{type:"text/csv"}));a.download="btcbot-history.csv";a.click()};
+
 /* ---------- loop ---------- */
 function fit(){const on=$("t-fit").classList.contains("on"),s=on?Math.min(1,window.innerWidth/1600):1;
   $("desk").style.transform=`scale(${s})`;$("stage").style.height=$("desk").offsetHeight*s+"px";$("stage").style.overflowX=on?"hidden":"auto"}
@@ -658,12 +740,12 @@ $("t-fit").onclick=e=>{e.target.classList.toggle("on");fit()};
 $("t-dark").onclick=e=>{e.target.classList.toggle("on");document.documentElement.dataset.theme=e.target.classList.contains("on")?"dark":"light"};
 window.addEventListener("resize",fit);
 function frame(){try{drawHeader();drawEngine();drawMvm();drawLand()}catch(e){console.error(e)}}
-function slow(){try{drawTicker();drawPnl();drawSpot();drawCards();drawFills()}catch(e){console.error(e)}}
+function slow(){try{drawTicker();drawPnl();drawSpot();drawCards();drawFills();drawHist()}catch(e){console.error(e)}}
 async function boot(){
   initCards();fit();
   if(SIM){startSim();diag("デモ",true,"作り物のデータで動いています")}else startLive();
   setInterval(()=>{rollWindow();simulate();frame()},CFG.TICK);
-  setInterval(slow,1000);setInterval(pollBook,SIM?500:2000);
+  setInterval(slow,1000);setInterval(settlePending,SIM?1000:10000);setInterval(pollBook,SIM?500:2000);
   $("ft-ver").textContent=SIM?"DEMO MODE — NUMBERS ARE SYNTHETIC":""}
 boot();
 </script>
