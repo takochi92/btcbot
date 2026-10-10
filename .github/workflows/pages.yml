@@ -1,0 +1,22 @@
+name: publish-page
+on:
+  push:
+    branches: [main]
+    paths: ["web/**"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: web/ を gh-pages ブランチへ
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp -r web /tmp/site && touch /tmp/site/.nojekyll
+          git checkout --orphan pages-tmp
+          git rm -rfq . && cp -r /tmp/site/. .
+          git add -A && git commit -qm "ページを更新 ${GITHUB_SHA::7}"
+          git push -f origin HEAD:gh-pages
