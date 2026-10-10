@@ -1,0 +1,8 @@
+{
+  "mean": 0.111141954439031,
+  "std": 0.5479355696924517,
+  "z": 1.645,
+  "min_trades": 10,
+  "backtest_trades": 55,
+  "passed": true
+}
