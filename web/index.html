@@ -256,6 +256,8 @@ canvas{display:block}
   ・Polymarket の板が取れないときは、売買はせず、モデルの当たり具合（BRIER）だけを記録します。<br>
   ・仮想資金は $1,000 から。記録はこのブラウザの中だけに残ります。<br>
   ・Polymarket の正式な判定は Chainlink の値段で、ここでは Binance の値段で判定しているので、ずれることがあります。</p>
+  <h2>接続の状態</h2>
+  <div id="diag" style="font-family:var(--mono);font-size:12px;line-height:1.9"></div>
   <p><button id="reset">仮想資金をリセット</button> <a href="?sim=1" style="color:var(--blue);margin-left:10px">デモ（作り物のデータ）で見る</a></p>
 </div>
 
@@ -279,6 +281,7 @@ const S={px:{},candles:{},ticks:[],book:{bids:[],asks:[]},feed:"connecting",
   landed:0,cards:{},settleShow:0,lastStep:-1};
 SYMS.forEach(s=>{S.px[s]=null;S.candles[s]=[]});
 
+const D={};function diag(k,ok,msg){D[k]={ok,msg,t:hms(now())};const el=$("diag");if(el)el.innerHTML=Object.entries(D).map(([n,v])=>`<div><span class="${v.ok?"up":"down"}">${v.ok?"✓":"✗"}</span> ${n} — ${v.msg} <span class="dim">${v.t}</span></div>`).join("")}
 const KEY="btcbot.paper.v1";
 function freshAcct(){return{cash:CFG.START,tickets:[],hist:[{t:now(),eq:CFG.START}],calib:[],wins:[]}}
 let A=freshAcct();
@@ -308,17 +311,41 @@ async function loadHistory(){
   await Promise.all(SYMS.map(async s=>{
     const r=await fetch(`${REST}?symbol=${s}USDT&interval=1m&limit=120`);if(!r.ok)throw new Error(r.status);
     const j=await r.json();S.candles[s]=j.map(a=>({t:a[0]/1000,o:+a[1],h:+a[2],l:+a[3],c:+a[4],v:+a[5]}));
-    S.px[s]=S.candles[s].at(-1).c}))}
+    S.px[s]=S.candles[s].at(-1).c}));diag("Binance 履歴",true,"1分足 120本")}
+/* fallback: Coinbase (REST candles + ticker websocket) */
+async function loadHistoryCB(){
+  await Promise.all(SYMS.map(async s=>{
+    const r=await fetch(`https://api.exchange.coinbase.com/products/${s}-USD/candles?granularity=60`);if(!r.ok)throw new Error(r.status);
+    const j=await r.json();S.candles[s]=j.slice(0,120).reverse().map(a=>({t:a[0],o:+a[3],h:+a[2],l:+a[1],c:+a[4],v:+a[5]}));
+    S.px[s]=S.candles[s].at(-1).c}));diag("Coinbase 履歴",true,"1分足 120本")}
+function connectCB(){
+  const ws=new WebSocket("wss://ws-feed.exchange.coinbase.com");
+  ws.onopen=()=>{ws.send(JSON.stringify({type:"subscribe",product_ids:SYMS.map(s=>s+"-USD"),channels:["ticker"]}));S.feed="coinbase";diag("Coinbase 値段",true,"つながりました")};
+  ws.onmessage=e=>{const d=JSON.parse(e.data);if(d.type!=="ticker")return;const sym=d.product_id.split("-")[0],p=+d.price,t=Math.floor(Date.parse(d.time)/60000)*60;
+    const c=S.candles[sym],last=c.at(-1);
+    if(last&&last.t===t){last.c=p;last.h=Math.max(last.h,p);last.l=Math.min(last.l,p);last.v+=+d.last_size||0}else upsertCandle(sym,{t,o:last?last.c:p,h:p,l:p,c:p,v:+d.last_size||0});
+    if(sym==="BTC"){pushTick(p);const bb=+d.best_bid,ba=+d.best_ask;if(bb&&ba)S.book={bids:[[bb,+d.best_bid_size||0]],asks:[[ba,+d.best_ask_size||0]]}}else S.px[sym]=p};
+  ws.onclose=()=>{S.feed="reconnecting";diag("Coinbase 値段",false,"切れました。3秒後につなぎ直します");setTimeout(connectCB,3000)};
+  ws.onerror=()=>ws.close()}
+async function startLive(){
+  try{await loadHistory();S.feed="rest"}catch(e){diag("Binance 履歴",false,"取れません ("+(e.message||e)+")")}
+  connectWS();
+  setTimeout(async()=>{ if(S.feed==="binance")return;   // Binance did not answer in time → Coinbase
+    diag("Binance 値段",false,"8秒たってもつながらないので Coinbase に切り替えます");BIN_OFF=true;
+    try{if(!S.candles.BTC.length)await loadHistoryCB()}catch(e){diag("Coinbase 履歴",false,"取れません ("+(e.message||e)+")")}
+    connectCB()},8000)}
+let BIN_OFF=false;
 function connectWS(){
   const st=SYMS.map(s=>s.toLowerCase()+"usdt@kline_1m").concat(["btcusdt@aggTrade","btcusdt@depth20@100ms"]).join("/");
   const ws=new WebSocket(WS+st);
-  ws.onopen=()=>{S.feed="binance"};
+  if(BIN_OFF)return;
+  ws.onopen=()=>{if(BIN_OFF){ws.close();return}S.feed="binance";diag("Binance 値段",true,"つながりました")};
   ws.onmessage=e=>{const m=JSON.parse(e.data),d=m.data;if(!d)return;
     if(d.e==="kline"){const sym=d.s.replace("USDT","");const k=d.k;upsertCandle(sym,{t:k.t/1000,o:+k.o,h:+k.h,l:+k.l,c:+k.c,v:+k.v});
       if(sym!=="BTC")S.px[sym]=+k.c}
     else if(d.e==="aggTrade")pushTick(+d.p);
     else if(d.bids){S.book={bids:d.bids.map(a=>[+a[0],+a[1]]),asks:d.asks.map(a=>[+a[0],+a[1]])}}};
-  ws.onclose=()=>{S.feed="reconnecting";setTimeout(connectWS,3000)};
+  ws.onclose=()=>{if(BIN_OFF)return;S.feed="reconnecting";setTimeout(connectWS,3000)};
   ws.onerror=()=>ws.close()}
 function startSim(){ // clearly-labelled synthetic feed for the demo
   S.feed="SIM";const base={BTC:82400,ETH:3100,SOL:150,XRP:2.4},t0=Math.floor(now()/60)*60;
@@ -333,13 +360,16 @@ function startSim(){ // clearly-labelled synthetic feed for the demo
 async function findMarket(start){
   S.mk={status:"searching",up:null,down:null,askUp:null,askDown:null,bookUp:null,start};
   if(SIM){S.mk.status="SIM";return}
-  try{const r=await fetch(`https://gamma-api.polymarket.com/markets?slug=btc-updown-5m-${start}`);const j=await r.json();
-    const m=Array.isArray(j)?j[0]:j;if(!m||!m.clobTokenIds)throw 0;
+  const slug=`btc-updown-5m-${start}`;
+  try{let m=null;
+    try{const j=await (await fetch(`https://gamma-api.polymarket.com/markets?slug=${slug}`)).json();m=Array.isArray(j)?j[0]:j}catch(e){}
+    if(!m||!m.clobTokenIds){const j=await (await fetch(`https://gamma-api.polymarket.com/events?slug=${slug}`)).json();const ev=Array.isArray(j)?j[0]:j;m=ev&&ev.markets&&ev.markets[0]}
+    if(!m||!m.clobTokenIds)throw new Error("市場が見つかりません ("+slug+")");
     const outs=JSON.parse(m.outcomes),toks=JSON.parse(m.clobTokenIds);
     const iu=outs.findIndex(o=>/up/i.test(o)),id=outs.findIndex(o=>/down/i.test(o));
     if(S.mk.start!==start)return;
-    S.mk.up=toks[iu];S.mk.down=toks[id];S.mk.status="polymarket"}
-  catch(e){if(S.mk.start===start)S.mk.status="no market"}}
+    S.mk.up=toks[iu];S.mk.down=toks[id];S.mk.status="polymarket";diag("Polymarket 市場",true,slug)}
+  catch(e){if(S.mk.start===start){S.mk.status="no market";diag("Polymarket 市場",false,(e.message||"取れません")+" — 売買せず、予想の当たり具合だけ記録します")}}}
 async function pollBook(){
   const mk=S.mk;
   if(SIM&&S.pUp!=null){ // demo: market lags the model with noise
@@ -351,8 +381,9 @@ async function pollBook(){
     const best=(a,f)=>a&&a.length?a.map(x=>+x.price).reduce((p,c)=>f(p,c)):null;
     if(S.mk!==mk)return;
     mk.askUp=best(u.asks,Math.min);mk.askDown=best(d.asks,Math.min);
+    diag("Polymarket 板",mk.askUp!=null,mk.askUp!=null?`UP ${fmt(mk.askUp*100)}¢ / DOWN ${fmt(mk.askDown*100)}¢`:"板が空です");
     mk.bookUp={bids:(u.bids||[]).map(x=>[+x.price,+x.size]).sort((a,b)=>b[0]-a[0]).slice(0,7),asks:(u.asks||[]).map(x=>[+x.price,+x.size]).sort((a,b)=>a[0]-b[0]).slice(0,7)}}
-  catch(e){mk.askUp=mk.askDown=null}}
+  catch(e){mk.askUp=mk.askDown=null;diag("Polymarket 板",false,"取れません ("+(e.message||e)+")")}}
 
 /* ---------- windows, model, trading ---------- */
 function newWindow(start,ptb,partial){
@@ -424,9 +455,9 @@ function drawHeader(){
   $("h-edge").textContent=e==null?"—":sgn(e);$("h-edge").className="v "+(e==null?"":e>=0?"up":"down");
   $("h-win").textContent=w?"window #"+(w.start/CFG.WIN%10000):"window";
   $("h-feed").textContent="feed "+S.feed;
-  const ok=(S.feed==="binance"||S.feed==="SIM")&&S.px.BTC;
+  const ok=(S.feed==="binance"||S.feed==="coinbase"||S.feed==="SIM")&&S.px.BTC;
   $("status").textContent=SIM?"● DEMO · SIM DATA":ok?"● PAPER DESK ONLINE":"● FEED "+S.feed.toUpperCase();$("status").className=ok&&!SIM?"":"bad";
-  $("ft-src").textContent=`PRICES: ${SIM?"SIM":"BINANCE"} · BOOK: ${mk.status.toUpperCase()}`;$("ft-s").textContent=ok?"ONLINE":"OFFLINE"}
+  $("ft-src").textContent=`PRICES: ${SIM?"SIM":S.feed.toUpperCase()} · BOOK: ${mk.status.toUpperCase()}`;$("ft-s").textContent=ok?"ONLINE":"OFFLINE"}
 function drawTicker(){
   const w=S.win;const cur=w?A.tickets.filter(t=>t.win===w.start):[];
   $("k-n").textContent=fmt(A.tickets.length);$("k-spent").textContent=usd(cur.reduce((a,t)=>a+t.stake,0));
@@ -630,7 +661,7 @@ function frame(){try{drawHeader();drawEngine();drawMvm();drawLand()}catch(e){con
 function slow(){try{drawTicker();drawPnl();drawSpot();drawCards();drawFills()}catch(e){console.error(e)}}
 async function boot(){
   initCards();fit();
-  if(SIM)startSim();else{try{await loadHistory();S.feed="rest"}catch(e){S.feed="history failed"}connectWS()}
+  if(SIM){startSim();diag("デモ",true,"作り物のデータで動いています")}else startLive();
   setInterval(()=>{rollWindow();simulate();frame()},CFG.TICK);
   setInterval(slow,1000);setInterval(pollBook,SIM?500:2000);
   $("ft-ver").textContent=SIM?"DEMO MODE — NUMBERS ARE SYNTHETIC":""}
