@@ -1,0 +1,776 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>BTCBOT Desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#050607;--panel:#0a0c0e;--line:#1a1f24;--line2:#262c33;--text:#e8ecef;--dim:#6b747d;--faint:#3a4148;
+  --up:#19d38a;--down:#ff3b5c;--gold:#f5b83d;--blue:#4aa8ff;--chip:#e8ecef;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;--sans:"Space Grotesk",system-ui,sans-serif;
+}
+:root[data-theme="light"]{--bg:#eef0f2;--panel:#fff;--line:#dde1e5;--line2:#cfd5db;--text:#0d1114;--dim:#5d6770;--faint:#b5bcc3;--chip:#0d1114}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--text);font-family:var(--mono);overflow-x:hidden}
+body{min-height:100vh}
+#stage{width:100%;overflow:hidden}
+#desk{width:1600px;transform-origin:0 0;padding:0 0 6px}
+.row{display:flex;border-bottom:1px solid var(--line)}
+.panel{background:var(--panel);border-right:1px solid var(--line);position:relative;overflow:hidden}
+.panel:last-child{border-right:0}
+.ph{display:flex;align-items:center;gap:14px;padding:10px 14px 8px;font-size:11px;letter-spacing:.08em;color:var(--dim);white-space:nowrap}
+.ph b{color:var(--text);font-weight:700;letter-spacing:.1em}
+.ph b::before{content:"◆ ";font-size:9px}
+.ph .r{margin-left:auto;display:flex;gap:14px}
+.lbl{font-size:9px;letter-spacing:.08em;color:var(--dim);text-transform:uppercase;white-space:nowrap}
+.up{color:var(--up)}.down{color:var(--down)}.gold{color:var(--gold)}.dim{color:var(--dim)}
+canvas{display:block}
+/* header */
+#hdr{display:flex;align-items:center;height:64px;padding:0 14px;gap:30px;border-bottom:1px solid var(--line)}
+#logo{display:flex;align-items:center;gap:10px}
+#logo .name{font-family:var(--sans);font-weight:700;font-size:22px}
+#logo .sub{font-size:9px;color:var(--dim);letter-spacing:.1em;margin-top:2px}
+.hstat{display:flex;flex-direction:column;align-items:flex-start}
+.hstat .v{font-size:17px;font-weight:700}
+#clock{font-size:26px;font-weight:700;font-family:var(--sans);letter-spacing:.02em}
+.tog{font-size:11px;color:var(--dim);cursor:pointer;user-select:none;padding:4px 8px;border:1px solid transparent;border-radius:3px}
+.tog.on{color:var(--text);border-color:var(--line2)}
+#status{margin-left:auto;font-size:11px;letter-spacing:.1em;padding:7px 12px;border:1px solid #145c3d;color:var(--up);border-radius:3px;background:rgba(25,211,138,.06)}
+#status.bad{border-color:#5c1424;color:var(--down);background:rgba(255,59,92,.06)}
+/* ticker */
+#tick{display:flex;align-items:center;height:30px;border-bottom:1px solid var(--line);font-size:11px;letter-spacing:.06em;color:var(--dim);overflow:hidden;white-space:nowrap}
+#tick .live{background:var(--chip);color:var(--bg);font-weight:700;padding:0 12px;height:100%;display:flex;align-items:center;gap:6px}
+#tick .live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--down)}
+#tick .seg{padding:0 16px}
+#tick .seg b{color:var(--text)}
+#marq{flex:1;overflow:hidden;position:relative;height:100%}
+#marq div{position:absolute;white-space:nowrap;top:8px;animation:mq 40s linear infinite}
+@keyframes mq{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+#marq span{margin-right:34px}#marq span b{color:var(--text)}
+/* pnl */
+#pnl{width:540px}
+#eq{font-family:var(--sans);font-weight:700;font-size:58px;color:var(--up);line-height:1}
+#eq small{font-size:30px;color:var(--dim);margin-right:2px}
+.kv{display:grid;grid-template-columns:repeat(4,1fr);padding:4px 16px 0}
+.kv .v{font-size:17px;font-weight:700;margin-top:3px}
+.bar{height:5px;background:var(--line2);border-radius:3px;overflow:hidden;margin-top:5px}
+.bar i{display:block;height:100%}
+/* spot */
+#spot{flex:1}
+#ladder{position:absolute;right:0;top:34px;width:300px;bottom:150px;overflow:hidden;font-size:11px;border-left:1px solid var(--line)}
+#ladder .lr{display:flex;justify-content:space-between;padding:0 10px;height:16px;align-items:center;position:relative}
+#ladder .lr i{position:absolute;right:0;top:2px;bottom:2px;opacity:.28}
+#ladder .mid{display:flex;justify-content:space-between;padding:6px 10px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:3px 0}
+#ladder .mid .v{font-size:18px;font-weight:700}
+#watch{position:absolute;left:0;right:0;bottom:0;height:150px;border-top:1px solid var(--line);padding:6px 10px}
+#cards{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:6px}
+.card{border:1px solid var(--line2);border-radius:3px;padding:4px 7px;height:46px;position:relative;overflow:hidden}
+.card.u{background:rgba(25,211,138,.07);border-color:rgba(25,211,138,.35)}
+.card.d{background:rgba(255,59,92,.07);border-color:rgba(255,59,92,.35)}
+.card .t{font-size:9px;color:var(--dim)}
+.card .v{font-size:16px;font-weight:700}
+.card canvas{position:absolute;right:5px;bottom:6px}
+/* engine */
+#engine{width:1600px;height:600px}
+#eng-l{position:absolute;left:16px;top:40px;width:420px}
+#eng-l h1{font-family:var(--sans);font-size:34px;letter-spacing:.02em;margin-bottom:8px}
+#eng-l p{font-size:11px;color:var(--dim);line-height:1.55}
+#eng-l p b{color:var(--text)}
+#grad{height:4px;border-radius:2px;margin:10px 0 4px;width:240px;background:linear-gradient(90deg,#ff8a1f,#ff3b7a,#c86bff,#3fe0c5,#4aa8ff)}
+.trio{display:flex;gap:40px;margin-top:10px}
+.trio .v{font-size:18px;font-weight:700}
+#born{position:absolute;left:16px;bottom:58px;width:420px;font-size:11.5px;background:rgba(5,6,7,.55)}
+#born .h{display:flex;justify-content:space-between;margin-bottom:8px;font-weight:700}
+#born .s{display:flex;justify-content:space-between;padding:4px 0;color:var(--faint)}
+#born .s.on{color:var(--text)}
+#born .s .k::before{content:"●";margin-right:8px;font-size:9px}
+#born .s.on .k::before{color:var(--up)}
+#eng-r{position:absolute;right:16px;top:40px;width:330px}
+#cd{font-family:var(--sans);font-size:56px;font-weight:700;line-height:1}
+#cdbar{height:3px;background:var(--line2);margin:8px 0 10px}#cdbar i{display:block;height:100%;background:var(--gold)}
+.kl{display:flex;justify-content:space-between;font-size:11px;padding:2px 0}
+.kl span:first-child{color:var(--dim)}
+#pp{display:flex;gap:26px;margin-top:20px;font-family:var(--sans);font-weight:700;font-size:40px}
+#tix{position:absolute;right:16px;top:332px;width:330px;font-size:11px}
+#tix .tr{display:grid;grid-template-columns:70px 1fr 60px;align-items:center;gap:8px;height:30px}
+#tix .tr .m{height:3px;background:var(--line2);position:relative}
+#tix .tr .m i{position:absolute;left:0;top:0;bottom:0}
+#settled{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);background:rgba(10,12,14,.92);border:1px solid var(--line2);padding:14px 28px;text-align:center;display:none}
+#settled .a{font-family:var(--sans);font-size:30px;font-weight:700;letter-spacing:.04em}
+#settled .b{font-size:11px;color:var(--dim);margin-top:4px;letter-spacing:.08em}
+#scrub{position:absolute;left:16px;right:16px;bottom:22px;height:16px}
+/* bottom */
+#fills{width:560px;height:230px}#mvm{width:520px;height:230px}#land{flex:1;height:230px}
+#ftab{position:absolute;left:12px;bottom:6px;width:400px;font-size:10px}
+#ftab .fr{display:grid;grid-template-columns:62px 70px 70px 60px 1fr;height:14px}
+#pos{position:absolute;right:12px;top:40px;width:110px;font-size:11px}
+#foot{display:flex;align-items:center;gap:24px;font-size:10px;color:var(--dim);padding:6px 0 0;letter-spacing:.06em}
+#foot .chip{background:var(--chip);color:var(--bg);font-weight:700;padding:3px 8px}
+#help{font-family:system-ui,sans-serif;font-size:13px;line-height:1.7;color:var(--text);max-width:760px;margin:18px auto 40px;padding:0 16px}
+#help h2{font-size:16px;margin:16px 0 6px}
+#help code{font-family:var(--mono);font-size:12px;background:var(--panel);padding:1px 5px;border:1px solid var(--line)}
+#hist{font-family:system-ui,sans-serif;max-width:1100px;margin:22px auto 0;padding:0 16px;color:var(--text)}
+#hist h2{font-size:18px;margin-bottom:10px}
+#hsum{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:12px}
+#hsum div{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+#hsum .k{font-size:11px;color:var(--dim)}#hsum .v{font-size:18px;font-weight:700;font-family:var(--mono);margin-top:2px}
+#hbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
+#hbar button{font:inherit;font-size:13px;padding:5px 12px;background:var(--panel);color:var(--text);border:1px solid var(--line2);border-radius:999px;cursor:pointer}
+#hbar button.on{background:var(--text);color:var(--bg)}
+#hwrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px}
+#htab{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
+#htab th{text-align:left;font-weight:600;color:var(--dim);font-size:11px;padding:8px 10px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0}
+#htab td{padding:7px 10px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:12px}
+#htab td.n{text-align:right}
+#hmore{margin-top:8px}
+#help button{font:inherit;padding:6px 12px;background:var(--panel);color:var(--text);border:1px solid var(--line2);border-radius:4px;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="stage"><div id="desk">
+
+<div id="hdr">
+  <div id="logo">
+    <svg width="40" height="30" viewBox="0 0 40 30"><g stroke-width="1.4" fill="none">
+      <path d="M4 15 C14 15 20 4 38 2" stroke="#4aa8ff"/><path d="M4 15 C14 15 22 9 38 8" stroke="#3fe0c5"/>
+      <path d="M4 15 C14 15 24 14 38 15" stroke="#e8ecef"/><path d="M4 15 C14 15 22 21 38 22" stroke="#ff3b7a"/>
+      <path d="M4 15 C14 15 20 26 38 28" stroke="#ff8a1f"/></g><circle cx="4" cy="15" r="3" fill="#fff"/></svg>
+    <div><div class="name">BTCBOT</div><div class="sub">BTC UP/DOWN 5M · PAPER</div></div>
+  </div>
+  <div class="hstat"><span class="v" id="h-worlds">20,480</span><span class="lbl">worlds / tick</span></div>
+  <div class="hstat"><span class="v" id="h-model">—</span><span class="lbl">model say up</span></div>
+  <div class="hstat"><span class="v" id="h-ask">—</span><span class="lbl">book up</span></div>
+  <div class="hstat"><span class="v" id="h-edge">—</span><span class="lbl">edge</span></div>
+  <div class="hstat"><span id="clock">--:--:--</span><span class="lbl" id="h-win">window</span></div>
+  <div class="hstat"><span class="v">UTC</span><span class="lbl" id="h-feed">feed —</span></div>
+  <span class="tog on" id="t-fit">FIT</span>
+  <span class="tog on" id="t-dark">DARK</span>
+  <div id="status">● PAPER DESK</div>
+</div>
+
+<div id="tick">
+  <span class="live">LIVE</span>
+  <span class="seg"><b id="k-n">0</b> TICKETS</span>
+  <span class="seg">SPENT THIS WINDOW <b id="k-spent">$0</b></span>
+  <div id="marq"><div id="marq-in"><span>WAITING FOR FIRST TICKET</span></div></div>
+</div>
+
+<div class="row" style="height:440px">
+  <div class="panel" id="pnl">
+    <div class="ph"><b>P&amp;L</b><span>ONE WALLET · EVERY WINDOW SETTLES</span><span class="r"><span id="p-roi" class="up">+0.00%</span><span>RUNNING <span id="p-run">0</span></span></span></div>
+    <div style="display:flex;align-items:center;gap:10px;padding:0 16px">
+      <span style="width:6px;height:6px;border-radius:50%;background:var(--up)"></span>
+      <span class="lbl">FairValueMachine · paper wallet</span>
+      <span class="lbl" style="margin-left:auto;border:1px solid #145c3d;color:var(--up);padding:3px 7px">PAPER</span>
+    </div>
+    <div style="display:flex;align-items:flex-end;gap:16px;padding:10px 16px 6px">
+      <div id="eq"><small>$</small>1,000</div>
+      <div><div id="p-last" class="lbl" style="font-size:12px;border:1px solid var(--line2);padding:4px 8px;color:var(--up)">▲ $0</div>
+      <div class="lbl" style="margin-top:6px" id="p-lastw">LAST SETTLE —</div></div>
+    </div>
+    <div class="kv">
+      <div><div class="lbl">tickets</div><div class="v" id="p-n">0</div></div>
+      <div><div class="lbl">win rate</div><div class="v up" id="p-wr">—</div></div>
+      <div><div class="lbl">avg edge</div><div class="v" id="p-ae">—</div></div>
+      <div><div class="lbl">roi</div><div class="v" id="p-r2">—</div></div>
+    </div>
+    <canvas id="c-eq" width="540" height="150"></canvas>
+    <div style="display:flex;gap:16px;padding:0 16px">
+      <canvas id="c-calib" width="200" height="70"></canvas>
+      <div style="flex:1;font-size:10px">
+        <div class="kl"><span>MODEL HIT RATE · 1:30 LEFT</span><span id="b1t">—</span></div><div class="bar"><i id="b1" style="width:0;background:var(--up)"></i></div>
+        <div class="kl" style="margin-top:6px"><span>BRIER · LOWER IS BETTER</span><span id="b2t">—</span></div><div class="bar"><i id="b2" style="width:0;background:var(--text)"></i></div>
+        <div class="kl" style="margin-top:6px"><span>UP / DOWN TICKETS</span><span id="b3t">—</span></div><div class="bar"><i id="b3" style="width:0;background:var(--gold)"></i></div>
+      </div>
+    </div>
+  </div>
+  <div class="panel" id="spot">
+    <div class="ph"><b>SPOT ENGINE</b><span>BTC · 1M CANDLES · VWAP 2σ BANDS · UP BOOK</span><span class="r"><span id="s-px" style="color:var(--text)">—</span><span id="s-chg">—</span><span>FILLS <span id="s-f">0</span></span></span></div>
+    <canvas id="c-spot" width="760" height="256"></canvas>
+    <div id="ladder"></div>
+    <div id="watch">
+      <div class="ph" style="padding:0"><b>MARKET WATCH</b><span>MODEL P(UP) · 4 COINS × 5M / 15M / 1H</span><span class="r"><span id="w-note">PRICE TO BEAT = WINDOW OPEN</span></span></div>
+      <div id="cards"></div>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="panel" id="engine">
+    <div class="ph" style="position:absolute;left:0;right:0;top:0;z-index:2"><b>QUANT ENGINE</b><span>20,480 FUTURES OF BTC TO THE CLOSE</span><span>RE-RUN FOUR TIMES A SECOND</span><span>COLOUR = WHERE EACH LANDS</span><span class="r"><span id="e-ev">EV —</span><span>THREADS 2,048</span></span></div>
+    <canvas id="c-eng" width="1600" height="600" style="position:absolute;left:0;top:0"></canvas>
+    <div id="eng-l">
+      <h1>QUANT ENGINE</h1>
+      <p>four times a second the desk re-runs <b>20,480</b> futures of btc to the 5-minute close. every thread is one world, coloured by where it lands against the price to beat.</p>
+      <div style="display:flex;align-items:center;gap:8px;font-size:9px;color:var(--dim)"><span>closes down</span><div id="grad"></div><span>closes up</span></div>
+      <div class="trio">
+        <div><div class="v" id="e-sig">—</div><div class="lbl">1σ to the close</div></div>
+        <div><div class="v" id="e-dr">—</div><div class="lbl">vs price to beat</div></div>
+        <div><div class="v">2,048</div><div class="lbl">threads drawn</div></div>
+      </div>
+    </div>
+    <div id="born">
+      <div class="h"><span>how a ticket is born</span><span class="dim" id="bn-w">window —</span></div>
+      <div class="s" id="bs0"><span class="k">simulate</span><span>20,480 worlds</span></div>
+      <div class="s" id="bs1"><span class="k">count</span><span id="bv1">—</span></div>
+      <div class="s" id="bs2"><span class="k">compare</span><span id="bv2">—</span></div>
+      <div class="s" id="bs3"><span class="k">size</span><span id="bv3">—</span></div>
+      <div class="s" id="bs4"><span class="k">fill</span><span id="bv4">—</span></div>
+      <div class="s" id="bs5"><span class="k">settle</span><span id="bv5">—</span></div>
+    </div>
+    <div id="eng-r">
+      <div class="lbl" style="display:flex;justify-content:space-between"><span>BTC UP OR DOWN · 5M</span><span id="e-wid">—</span></div>
+      <div id="cd">-:--</div>
+      <div id="cdbar"><i style="width:0"></i></div>
+      <div class="kl"><span>PRICE TO BEAT</span><span id="e-ptb">—</span></div>
+      <div class="kl"><span>BTC NOW</span><span id="e-now">—</span></div>
+      <div class="kl"><span>DISTANCE</span><span id="e-dist">—</span></div>
+      <div id="pp"><span class="up" id="e-up">—</span><span class="down" id="e-down">—</span></div>
+      <div class="kl" style="font-size:9px"><span>OF WORLDS CLOSE UP</span><span>CLOSE DOWN</span></div>
+      <div class="kl" style="margin-top:14px"><span id="e-book">BOOK —</span><span id="e-edge">EDGE —</span></div>
+    </div>
+    <div id="tix"><div class="lbl" style="margin-bottom:6px">TICKETS THIS WINDOW · LIVE MARK</div><div id="tix-in"></div></div>
+    <div id="settled"><div class="a" id="st-a">SETTLED UP</div><div class="b" id="st-b">—</div></div>
+    <canvas id="scrub" width="1568" height="16"></canvas>
+  </div>
+</div>
+
+<div class="row">
+  <div class="panel" id="fills">
+    <div class="ph"><b>FILLS</b><span>EVERY TICKET RIDES TO ITS SETTLE</span><span class="r"><span id="f-open">0 OPEN</span><span id="f-today">0 TODAY</span></span></div>
+    <canvas id="c-fills" width="560" height="110"></canvas>
+    <div id="pos"></div>
+    <div id="ftab"></div>
+  </div>
+  <div class="panel" id="mvm">
+    <div class="ph"><b>MODEL VS MARKET</b><span>P(UP) THIS WINDOW</span><span class="r"><span id="m-left">—</span></span></div>
+    <div class="lbl" style="padding:0 14px" id="m-sub">—</div>
+    <canvas id="c-mvm" width="520" height="170"></canvas>
+  </div>
+  <div class="panel" id="land">
+    <div class="ph"><b>LANDING BOARD</b><span>WHERE THE WORLDS FALL</span><span class="r"><span id="l-n">0 LANDED</span></span></div>
+    <canvas id="c-land" width="520" height="190"></canvas>
+  </div>
+</div>
+
+<div id="foot"><span class="chip">BTCBOT · <span id="ft-s">ONLINE</span></span>
+  <span>PAPER ONLY · NO REAL MONEY</span><span id="ft-src">PRICES: — · BOOK: —</span><span>MODEL: GBM, σ FROM LAST 60 × 1M CANDLES</span><span id="ft-ver"></span></div>
+</div></div>
+
+<div id="hist">
+  <h2>ポジション履歴（仮想）</h2>
+  <div id="hsum"></div>
+  <div id="hbar">
+    <button data-f="all" class="on">すべて</button><button data-f="open">持ち中</button><button data-f="win">勝ち</button><button data-f="lose">負け</button>
+    <span style="flex:1"></span><button id="hcsv">CSV で保存</button>
+  </div>
+  <div id="hwrap"><table id="htab"><thead><tr>
+    <th>買った時刻</th><th>5分の窓</th><th>向き</th><th class="n">枚数</th><th class="n">買値</th><th class="n">支払い</th><th class="n">予想</th><th class="n">有利さ</th><th>結果</th><th class="n">損益</th>
+  </tr></thead><tbody id="hbody"></tbody></table></div>
+  <div id="hmore"></div>
+</div>
+
+<div id="help">
+  <h2>これは何？</h2>
+  <p><b>いまの表示：</b><span id="mode-note"></span></p>
+  <p>「5分後に BTC が今より上か下か」に賭ける予測市場（Polymarket の BTC Up or Down 5m）向けのボットを、<b>仮想のお金だけ</b>で動かす画面です。このページを開いている間、ブラウザの中でボットが動きます。</p>
+  <p>・BTC の値段は Binance の公開データを使います。<br>
+  ・1秒に4回、5分足の終わりまでの値動きを 20,480 通りシミュレーションし、「上で終わる確率」を出します。<br>
+  ・Polymarket の板が取れたときだけ、モデルの確率が板の値段より <b>4¢ 以上</b>有利なら、仮想の券を買います（1枚あたり手数料 1¢ と仮定。1回 $25、1つの窓で $100 まで）。<br>
+  ・Polymarket の板が取れないときは、売買はせず、モデルの当たり具合（BRIER）だけを記録します。<br>
+  ・仮想資金は $1,000 から。記録はこのブラウザの中だけに残ります。<br>
+  ・Polymarket の正式な判定は Chainlink の値段で、ここでは Binance の値段で判定しているので、ずれることがあります。</p>
+  <h2>接続の状態</h2>
+  <div id="diag" style="font-family:var(--mono);font-size:12px;line-height:1.9"></div>
+  <p><button id="reset">仮想資金をリセット</button> <a href="?sim=1" style="color:var(--blue);margin-left:10px">デモ（作り物のデータ）で見る</a></p>
+</div>
+
+<script>
+"use strict";
+const CFG={WIN:300,WORLDS:20480,THREADS:2048,STEPS:24,TICK:250,MIN_EDGE:.04,FEE:.01,KELLY:.25,TICKET_CAP:25,WINDOW_CAP:100,COOLDOWN:15,START:1000,MIN_LEFT:15,MIN_PRICE:.10,MAX_PRICE:.90,MAX_EDGE:.15};
+const QS=new URLSearchParams(location.search),SIM=QS.has("sim");
+const SERVER=!SIM&&!QS.has("local");   // default: show the 24h bot that runs on GitHub Actions
+const DESK_URL="https://raw.githubusercontent.com/takochi92/btcbot/desk-data/desk.json";
+const SYMS=["BTC","ETH","SOL","XRP"],HZ=[[300,"5M"],[900,"15M"],[3600,"1H"]];
+const $=id=>document.getElementById(id);
+const fmt=(n,d=0)=>n==null||isNaN(n)?"—":n.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
+const usd=(n,d=0)=>(n<0?"-$":"$")+fmt(Math.abs(n),d);
+const sgn=(n,d=1,u="¢")=>(n>=0?"+":"-")+fmt(Math.abs(n),d)+u;
+const mmss=s=>{s=Math.max(0,Math.ceil(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")};
+const hms=t=>new Date(t*1000).toISOString().slice(11,19);
+const now=()=>Date.now()/1000;
+
+/* ---------- state ---------- */
+const S={px:{},candles:{},ticks:[],book:{bids:[],asks:[]},feed:"connecting",
+  mk:{status:"—",up:null,down:null,askUp:null,askDown:null,bookUp:null},
+  win:null,pUp:null,term:new Float64Array(CFG.WORLDS),paths:new Float32Array(CFG.THREADS*CFG.STEPS),pathT:0,
+  landed:0,cards:{},settleShow:0,lastStep:-1};
+SYMS.forEach(s=>{S.px[s]=null;S.candles[s]=[]});
+
+const D={};function diag(k,ok,msg){D[k]={ok,msg,t:hms(now())};const el=$("diag");if(el)el.innerHTML=Object.entries(D).map(([n,v])=>`<div><span class="${v.ok?"up":"down"}">${v.ok?"✓":"✗"}</span> ${n} — ${v.msg} <span class="dim">${v.t}</span></div>`).join("")}
+const KEY="btcbot.paper.v2";
+function freshAcct(){return{cash:CFG.START,tickets:[],hist:[{t:now(),eq:CFG.START}],calib:[],wins:[],pend:[]}}
+let A=freshAcct();
+try{const j=JSON.parse(localStorage.getItem(KEY)||"null");if(j&&j.cash!=null)A=j}catch(e){}
+function save(){if(SERVER)return;try{localStorage.setItem(KEY,JSON.stringify(A))}catch(e){}}
+$("reset").onclick=()=>{if(SERVER){alert("24時間ボットのやり直しは GitHub の Actions → desk → Run workflow で reset を true にして実行します。");return}if(confirm("仮想資金と記録を消して $1,000 からやり直しますか？")){A=freshAcct();save()}};
+
+/* ---------- math ---------- */
+let spare=null;
+function randn(){if(spare!==null){const v=spare;spare=null;return v}
+  let u=0,v=0;while(u===0)u=Math.random();v=Math.random();const r=Math.sqrt(-2*Math.log(u));spare=r*Math.sin(6.283185307*v);return r*Math.cos(6.283185307*v)}
+function erf(x){const t=1/(1+.3275911*Math.abs(x));const y=1-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-.284496736)*t+.254829592)*t*Math.exp(-x*x);return x>=0?y:-y}
+const Phi=x=>.5*(1+erf(x/Math.SQRT2));
+function volPerSec(sym){ // σ per √second from the last 60 closed 1m candles
+  const c=S.candles[sym];if(c.length<10)return 0.0006/Math.sqrt(60);
+  const r=[];for(let i=Math.max(1,c.length-61);i<c.length-1;i++)r.push(Math.log(c[i].c/c[i-1].c));
+  const m=r.reduce((a,b)=>a+b,0)/r.length;const v=r.reduce((a,b)=>a+(b-m)**2,0)/(r.length-1);
+  return Math.max(Math.sqrt(v),0.00005)/Math.sqrt(60)}
+function openAt(sym,t){const c=S.candles[sym];for(let i=c.length-1;i>=0;i--){if(c[i].t===t)return c[i].o;if(c[i].t<t)break}return null}
+
+/* ---------- data: Binance (or SIM) ---------- */
+const REST="https://data-api.binance.vision/api/v3/klines",WS="wss://data-stream.binance.vision/stream?streams=";
+function upsertCandle(sym,k){const c=S.candles[sym];const last=c[c.length-1];
+  if(last&&last.t===k.t)Object.assign(last,k);else if(!last||k.t>last.t){c.push(k);if(c.length>180)c.shift()}}
+function pushTick(p){const t=now();S.px.BTC=p;const L=S.ticks;if(!L.length||t-L[L.length-1].t>=.25){L.push({t,p});if(L.length>4000)L.shift()}}
+async function loadHistory(){
+  await Promise.all(SYMS.map(async s=>{
+    const r=await fetch(`${REST}?symbol=${s}USDT&interval=1m&limit=120`);if(!r.ok)throw new Error(r.status);
+    const j=await r.json();S.candles[s]=j.map(a=>({t:a[0]/1000,o:+a[1],h:+a[2],l:+a[3],c:+a[4],v:+a[5]}));
+    S.px[s]=S.candles[s].at(-1).c}));diag("Binance 履歴",true,"1分足 120本")}
+/* fallback: Coinbase (REST candles + ticker websocket) */
+async function loadHistoryCB(){
+  await Promise.all(SYMS.map(async s=>{
+    const r=await fetch(`https://api.exchange.coinbase.com/products/${s}-USD/candles?granularity=60`);if(!r.ok)throw new Error(r.status);
+    const j=await r.json();S.candles[s]=j.slice(0,120).reverse().map(a=>({t:a[0],o:+a[3],h:+a[2],l:+a[1],c:+a[4],v:+a[5]}));
+    S.px[s]=S.candles[s].at(-1).c}));diag("Coinbase 履歴",true,"1分足 120本")}
+function connectCB(){
+  const ws=new WebSocket("wss://ws-feed.exchange.coinbase.com");
+  ws.onopen=()=>{ws.send(JSON.stringify({type:"subscribe",product_ids:SYMS.map(s=>s+"-USD"),channels:["ticker"]}));S.feed="coinbase";diag("Coinbase 値段",true,"つながりました")};
+  ws.onmessage=e=>{const d=JSON.parse(e.data);if(d.type!=="ticker")return;const sym=d.product_id.split("-")[0],p=+d.price,t=Math.floor(Date.parse(d.time)/60000)*60;
+    const c=S.candles[sym],last=c.at(-1);
+    if(last&&last.t===t){last.c=p;last.h=Math.max(last.h,p);last.l=Math.min(last.l,p);last.v+=+d.last_size||0}else upsertCandle(sym,{t,o:last?last.c:p,h:p,l:p,c:p,v:+d.last_size||0});
+    if(sym==="BTC"){pushTick(p);const bb=+d.best_bid,ba=+d.best_ask;if(bb&&ba)S.book={bids:[[bb,+d.best_bid_size||0]],asks:[[ba,+d.best_ask_size||0]]}}else S.px[sym]=p};
+  ws.onclose=()=>{S.feed="reconnecting";diag("Coinbase 値段",false,"切れました。3秒後につなぎ直します");setTimeout(connectCB,3000)};
+  ws.onerror=()=>ws.close()}
+async function startLive(){
+  try{await loadHistory();S.feed="rest"}catch(e){diag("Binance 履歴",false,"取れません ("+(e.message||e)+")")}
+  connectWS();
+  setTimeout(async()=>{ if(S.feed==="binance")return;   // Binance did not answer in time → Coinbase
+    diag("Binance 値段",false,"8秒たってもつながらないので Coinbase に切り替えます");BIN_OFF=true;
+    try{if(!S.candles.BTC.length)await loadHistoryCB()}catch(e){diag("Coinbase 履歴",false,"取れません ("+(e.message||e)+")")}
+    connectCB()},8000)}
+let BIN_OFF=false;
+function connectWS(){
+  const st=SYMS.map(s=>s.toLowerCase()+"usdt@kline_1m").concat(["btcusdt@aggTrade","btcusdt@depth20@100ms"]).join("/");
+  const ws=new WebSocket(WS+st);
+  if(BIN_OFF)return;
+  ws.onopen=()=>{if(BIN_OFF){ws.close();return}S.feed="binance";diag("Binance 値段",true,"つながりました")};
+  ws.onmessage=e=>{const m=JSON.parse(e.data),d=m.data;if(!d)return;
+    if(d.e==="kline"){const sym=d.s.replace("USDT","");const k=d.k;upsertCandle(sym,{t:k.t/1000,o:+k.o,h:+k.h,l:+k.l,c:+k.c,v:+k.v});
+      if(sym!=="BTC")S.px[sym]=+k.c}
+    else if(d.e==="aggTrade")pushTick(+d.p);
+    else if(d.bids){S.book={bids:d.bids.map(a=>[+a[0],+a[1]]),asks:d.asks.map(a=>[+a[0],+a[1]])}}};
+  ws.onclose=()=>{if(BIN_OFF)return;S.feed="reconnecting";setTimeout(connectWS,3000)};
+  ws.onerror=()=>ws.close()}
+function startSim(){ // clearly-labelled synthetic feed for the demo
+  S.feed="SIM";const base={BTC:82400,ETH:3100,SOL:150,XRP:2.4},t0=Math.floor(now()/60)*60;
+  SYMS.forEach(s=>{let p=base[s];for(let i=120;i>0;i--){const o=p;let h=o,l=o;for(let k=0;k<6;k++){p*=Math.exp(.00025*randn());h=Math.max(h,p);l=Math.min(l,p)}
+    S.candles[s].push({t:t0-i*60,o,h,l,c:p,v:50+Math.random()*80})}S.px[s]=p});
+  setInterval(()=>{SYMS.forEach(s=>{const p=S.px[s]*Math.exp(.00004*randn());const t=Math.floor(now()/60)*60;const c=S.candles[s].at(-1);
+    if(c.t===t){c.c=p;c.h=Math.max(c.h,p);c.l=Math.min(c.l,p);c.v+=Math.random()}else upsertCandle(s,{t,o:c.c,h:Math.max(c.c,p),l:Math.min(c.c,p),c:p,v:1});
+    if(s==="BTC")pushTick(p);else S.px[s]=p});
+    const p=S.px.BTC;S.book={bids:[...Array(20)].map((_,i)=>[p-0.5-i*2.5,Math.random()*3]),asks:[...Array(20)].map((_,i)=>[p+0.5+i*2.5,Math.random()*3])}},250)}
+
+/* ---------- data: Polymarket order book ---------- */
+async function findMarket(start){
+  S.mk={status:"searching",up:null,down:null,askUp:null,askDown:null,bookUp:null,start};
+  if(SIM){S.mk.status="SIM";return}
+  const slug=`btc-updown-5m-${start}`;
+  try{let m=null;
+    try{const j=await (await fetch(`https://gamma-api.polymarket.com/markets?slug=${slug}`)).json();m=Array.isArray(j)?j[0]:j}catch(e){}
+    if(!m||!m.clobTokenIds){const j=await (await fetch(`https://gamma-api.polymarket.com/events?slug=${slug}`)).json();const ev=Array.isArray(j)?j[0]:j;m=ev&&ev.markets&&ev.markets[0]}
+    if(!m||!m.clobTokenIds)throw new Error("市場が見つかりません ("+slug+")");
+    const outs=JSON.parse(m.outcomes),toks=JSON.parse(m.clobTokenIds);
+    const iu=outs.findIndex(o=>/up/i.test(o)),id=outs.findIndex(o=>/down/i.test(o));
+    if(S.mk.start!==start)return;
+    S.mk.up=toks[iu];S.mk.down=toks[id];S.mk.status="polymarket";diag("Polymarket 市場",true,slug)}
+  catch(e){if(S.mk.start===start){S.mk.status="no market";diag("Polymarket 市場",false,(e.message||"取れません")+" — 売買せず、予想の当たり具合だけ記録します")}}}
+async function pollBook(){
+  const mk=S.mk;
+  if(SIM&&S.pUp!=null){ // demo: market lags the model with noise
+    const lag=S.win&&S.win.hist.length>8?S.win.hist[S.win.hist.length-8].m:S.pUp;
+    const mid=Math.min(.98,Math.max(.02,lag+.03*randn()));mk.askUp=Math.min(.99,mid+.01);mk.askDown=Math.min(.99,1-mid+.01);
+    mk.bookUp={bids:[...Array(7)].map((_,i)=>[mid-.01-i*.01,200+Math.random()*3000]),asks:[...Array(7)].map((_,i)=>[mid+.01+i*.01,200+Math.random()*3000])};return}
+  if(mk.status!=="polymarket")return;
+  try{const [u,d]=await Promise.all([mk.up,mk.down].map(t=>fetch(`https://clob.polymarket.com/book?token_id=${t}`).then(r=>r.json())));
+    const best=(a,f)=>a&&a.length?a.map(x=>+x.price).reduce((p,c)=>f(p,c)):null;
+    if(S.mk!==mk)return;
+    mk.askUp=best(u.asks,Math.min);mk.askDown=best(d.asks,Math.min);
+    diag("Polymarket 板",mk.askUp!=null,mk.askUp!=null?`UP ${fmt(mk.askUp*100)}¢ / DOWN ${fmt(mk.askDown*100)}¢`:"板が空です");
+    mk.bookUp={bids:(u.bids||[]).map(x=>[+x.price,+x.size]).sort((a,b)=>b[0]-a[0]).slice(0,7),asks:(u.asks||[]).map(x=>[+x.price,+x.size]).sort((a,b)=>a[0]-b[0]).slice(0,7)}}
+  catch(e){mk.askUp=mk.askDown=null;diag("Polymarket 板",false,"取れません ("+(e.message||e)+")")}}
+
+/* ---------- windows, model, trading ---------- */
+function newWindow(start,ptb,partial){
+  S.win={start,ptb,partial,hist:[],calibDone:false};findMarket(start)}
+function settle(w,up,final,src){
+  let pnl=0,n=0;
+  A.tickets.filter(t=>t.win===w.start&&!t.settled).forEach(t=>{const won=(t.side==="UP")===up;
+    t.settled=true;t.won=won;t.src=src;t.pnl=(won?t.shares:0)-t.stake-t.fee;A.cash+=won?t.shares:0;pnl+=t.pnl;n++});
+  A.wins.push({start:w.start,up,ptb:w.ptb,final,pnl,n,src});A.wins.sort((a,b)=>a.start-b.start);if(A.wins.length>500)A.wins.shift();
+  A.hist.push({t:now(),eq:equity()});if(A.hist.length>2000)A.hist.shift();
+  if(A.tickets.length>3000)A.tickets=A.tickets.slice(-3000);
+  save();S.settleShow={until:now()+5,up,pnl,n,src}}
+function equity(){return A.cash+A.tickets.filter(t=>!t.settled).reduce((a,t)=>a+t.stake,0)}
+/* settlement: Polymarket's own result first; Binance 1m open at the bell only as a fallback */
+async function binanceOpen(t){const c=openAt("BTC",t);if(c!=null)return c;
+  const r=await fetch(`${REST}?symbol=BTCUSDT&interval=1m&startTime=${t*1000}&limit=1`);const j=await r.json();return j.length&&j[0][0]===t*1000?+j[0][1]:null}
+async function polyResult(start){
+  const slug=`btc-updown-5m-${start}`;let m=null;
+  try{const j=await (await fetch(`https://gamma-api.polymarket.com/markets?slug=${slug}`)).json();m=Array.isArray(j)?j[0]:j}catch(e){}
+  if(!m||!m.outcomePrices){try{const j=await (await fetch(`https://gamma-api.polymarket.com/events?slug=${slug}`)).json();const ev=Array.isArray(j)?j[0]:j;m=ev&&ev.markets&&ev.markets[0]}catch(e){}}
+  if(!m||!m.outcomePrices)return null;
+  const outs=JSON.parse(m.outcomes),pr=JSON.parse(m.outcomePrices).map(Number),iu=outs.findIndex(o=>/up/i.test(o));
+  if(pr[iu]>=.99)return true;if(pr[iu]<=.01)return false;return null}   // not resolved yet
+let settling=false;
+async function settlePending(){
+  if(settling||!A.pend||!A.pend.length)return;settling=true;
+  try{for(const w of A.pend.slice()){const end=w.start+CFG.WIN,age=now()-end;
+    const hasT=A.tickets.some(t=>t.win===w.start&&!t.settled);let up=null,src="",final=null;
+    if(!SIM&&hasT){up=await polyResult(w.start);if(up!=null)src="polymarket"}
+    if(up==null&&(SIM||!hasT||age>900)){final=SIM?w.simFinal:await binanceOpen(end);if(final!=null){up=final>w.ptb;src="binance"}}
+    if(up==null)continue;
+    if(final==null)final=await binanceOpen(end).catch(()=>null);
+    A.pend=A.pend.filter(x=>x.start!==w.start);
+    if(w.partial&&!hasT){save();continue}
+    settle(w,up,final,src)}}
+  catch(e){console.error(e)}finally{settling=false}}
+function rollWindow(){
+  const t=now(),start=Math.floor(t/CFG.WIN)*CFG.WIN,p=S.px.BTC;if(!p)return;
+  if(S.win&&start===S.win.start)return;
+  if(S.win&&!SERVER){A.pend=A.pend||[];A.pend.push({start:S.win.start,ptb:S.win.ptb,partial:S.win.partial,simFinal:SIM?p:null});save()}
+  // price to beat = the real open of this window. If we woke up late and can't read it, only watch.
+  const o=openAt("BTC",start),fresh=t-start<3&&S.ticks.length&&t-S.ticks.at(-1).t<2;
+  newWindow(start,o??p,o==null&&!fresh)}function simulate(){
+  const p=S.px.BTC,w=S.win;if(!p||!w)return;
+  const T=Math.max(.5,w.start+CFG.WIN-now()),sig=volPerSec("BTC");
+  const sd=sig*Math.sqrt(T),mu=-.5*sd*sd;let up=0;const term=S.term;
+  for(let i=0;i<CFG.WORLDS;i++){const v=p*Math.exp(mu+sd*randn());term[i]=v;if(v>w.ptb)up++}
+  S.pUp=up/CFG.WORLDS;S.landed+=CFG.WORLDS;S.sd=sd;
+  const dt=T/CFG.STEPS,s=sig*Math.sqrt(dt),m=-.5*s*s,P=S.paths;
+  for(let j=0;j<CFG.THREADS;j++){let x=p;for(let k=0;k<CFG.STEPS;k++){x*=Math.exp(m+s*randn());P[j*CFG.STEPS+k]=x}}
+  S.pathT=T;
+  w.hist.push({t:now(),m:S.pUp,k:S.mk.askUp});if(w.hist.length>1400)w.hist.shift();
+  if(!w.calibDone&&T<=90&&!w.partial){w.calibDone=true;A.calib.push({start:w.start,p:S.pUp,ptb:w.ptb});if(A.calib.length>500)A.calib.shift()}
+  maybeTrade(T)}
+let lastTicket=0,stepState={};
+function maybeTrade(T){
+  const w=S.win,mk=S.mk,st=stepState;st.step=1;
+  if(mk.askUp==null||mk.askDown==null){st.cmp="no book";st.size="—";return}
+  const eU=S.pUp-mk.askUp-CFG.FEE,eD=(1-S.pUp)-mk.askDown-CFG.FEE;
+  const side=eU>=eD?"UP":"DOWN",edge=Math.max(eU,eD),ask=side==="UP"?mk.askUp:mk.askDown;
+  st.cmp=`book ${fmt(mk.askUp*100)}¢, edge ${sgn(edge*100)} ${side.toLowerCase()}`;st.step=2;
+  const spent=A.tickets.filter(t=>t.win===w.start).reduce((a,t)=>a+t.stake,0);
+  if(w.partial){st.size="joined late, watching only";return}
+  if(document.hidden||!S.ticks.length||now()-S.ticks.at(-1).t>5){st.size="price feed stale, not trading";return}
+  if(edge>CFG.MAX_EDGE){st.size=`edge ${sgn(edge*100)} is too good to be true, skip`;return}
+  if(ask<CFG.MIN_PRICE||ask>CFG.MAX_PRICE){st.size=`ticket ${fmt(ask*100)}¢ is outside ${CFG.MIN_PRICE*100}–${CFG.MAX_PRICE*100}¢`;return}
+  if(edge<CFG.MIN_EDGE){st.size="edge too small";return}
+  if(T<CFG.MIN_LEFT||T>CFG.WIN-5){st.size="too close to the bell";return}
+  if(spent>=CFG.WINDOW_CAP){st.size="window cap reached";return}
+  if(now()-lastTicket<CFG.COOLDOWN){st.size="cooling down";st.step=3;return}
+  if(SERVER){st.size="the 24h bot decides on the server";return}
+  const f=edge/(1-ask)*CFG.KELLY;let stake=Math.min(A.cash*f,CFG.TICKET_CAP,CFG.WINDOW_CAP-spent,A.cash);
+  if(stake<1){st.size="too small";return}
+  const shares=Math.floor(stake/ask);stake=shares*ask;const fee=shares*CFG.FEE;
+  if(shares<1||stake+fee>A.cash)return;
+  A.cash-=stake+fee;lastTicket=now();
+  const t={id:Date.now(),win:w.start,t:now(),side,shares,price:ask,stake,fee,edge,model:S.pUp,settled:false};
+  A.tickets.push(t);save();st.size=`¼ kelly, $${fmt(stake)}`;st.fill=`${shares} ${side.toLowerCase()} @ ${fmt(ask*100)}¢`;st.step=4}
+
+/* ---------- drawing helpers ---------- */
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+function ctx(id){const c=$(id),x=c.getContext("2d");return[x,c.width,c.height]}
+const GR=[[255,138,31],[255,59,122],[200,107,255],[63,224,197],[74,168,255]];
+function grad(u){u=Math.min(1,Math.max(0,u))*(GR.length-1);const i=Math.min(GR.length-2,Math.floor(u)),f=u-i,a=GR[i],b=GR[i+1];
+  return[a[0]+(b[0]-a[0])*f|0,a[1]+(b[1]-a[1])*f|0,a[2]+(b[2]-a[2])*f|0]}
+function spark(c,vals,col){const x=c.getContext("2d"),W=c.width,H=c.height;x.clearRect(0,0,W,H);if(vals.length<2)return;
+  const mn=Math.min(...vals),mx=Math.max(...vals),r=mx-mn||1;x.strokeStyle=col;x.lineWidth=1.2;x.beginPath();
+  vals.forEach((v,i)=>{const X=i/(vals.length-1)*W,Y=H-2-(v-mn)/r*(H-4);i?x.lineTo(X,Y):x.moveTo(X,Y)});x.stroke()}
+
+/* ---------- panels ---------- */
+function drawHeader(){
+  const w=S.win,mk=S.mk;$("clock").textContent=hms(now());
+  $("h-model").textContent=S.pUp==null?"—":fmt(S.pUp*100,1)+"¢";
+  $("h-ask").textContent=mk.askUp==null?"—":fmt(mk.askUp*100,1)+"¢";
+  const e=mk.askUp==null||S.pUp==null?null:(S.pUp-mk.askUp)*100;
+  $("h-edge").textContent=e==null?"—":sgn(e);$("h-edge").className="v "+(e==null?"":e>=0?"up":"down");
+  $("h-win").textContent=w?"window #"+(w.start/CFG.WIN%10000):"window";
+  $("h-feed").textContent="feed "+S.feed;
+  const ok=(S.feed==="binance"||S.feed==="coinbase"||S.feed==="SIM")&&S.px.BTC;
+  const age=SERVER&&A.status&&A.status.updated?now()-A.status.updated:null;
+  $("status").textContent=SIM?"● DEMO · SIM DATA":SERVER?(A.broke?"● BUSTED · $0":age==null?"● WAITING FOR 24H BOT":age<180?`● 24H BOT LIVE · ${Math.round(age)}s AGO`:"● 24H BOT PAUSED"):ok?"● PAPER DESK ONLINE":"● FEED "+S.feed.toUpperCase();
+  $("status").className=(SERVER?(age!=null&&age<180&&!A.broke):(ok&&!SIM))?"":"bad";
+  $("ft-src").textContent=`PRICES: ${SIM?"SIM":S.feed.toUpperCase()} · BOOK: ${mk.status.toUpperCase()}`;$("ft-s").textContent=ok?"ONLINE":"OFFLINE"}
+function drawTicker(){
+  const w=S.win;const cur=w?A.tickets.filter(t=>t.win===w.start):[];
+  $("k-n").textContent=fmt(A.tickets.length);$("k-spent").textContent=usd(cur.reduce((a,t)=>a+t.stake,0));
+  const last=A.tickets.slice(-8).reverse();
+  const key=last.map(t=>t.id).join();if(key&&key!==drawTicker.k){drawTicker.k=key;
+    const h=last.map(t=>`<span><b>BUY ${t.side}</b> ${t.shares} @ ${fmt(t.price*100)}¢ · EDGE <b class="${t.edge>=0?"up":"down"}">${sgn(t.edge*100)}</b></span>`).join("");
+    $("marq-in").innerHTML=h+h}}
+function drawPnl(){
+  const eq=equity(),roi=(eq/CFG.START-1)*100,set=A.tickets.filter(t=>t.settled);
+  $("eq").innerHTML="<small>$</small>"+fmt(eq);$("eq").style.color=eq>=CFG.START?"var(--up)":"var(--down)";
+  $("p-roi").textContent=sgn(roi,2,"%");$("p-roi").className=roi>=0?"up":"down";$("p-run").textContent=fmt(A.wins.length);
+  const lw=A.wins.at(-1);
+  if(lw){$("p-last").textContent=(lw.pnl>=0?"▲ ":"▼ ")+usd(lw.pnl);$("p-last").style.color=lw.pnl>=0?"var(--up)":"var(--down)";
+    $("p-lastw").textContent=`LAST SETTLE BTC ${lw.up?"UP":"DOWN"} ${hms(lw.start)}`}
+  $("p-n").textContent=fmt(A.tickets.length);
+  $("p-wr").textContent=set.length?fmt(set.filter(t=>t.won).length/set.length*100,1)+"%":"—";
+  $("p-ae").textContent=A.tickets.length?sgn(A.tickets.reduce((a,t)=>a+t.edge,0)/A.tickets.length*100):"—";
+  const st=set.reduce((a,t)=>a+t.stake+t.fee,0);$("p-r2").textContent=st?sgn(set.reduce((a,t)=>a+t.pnl,0)/st*100,1,"%"):"—";
+  // equity curve + per-window bars
+  const[x,W,H]=ctx("c-eq");x.clearRect(0,0,W,H);const h=A.hist.map(a=>a.eq);if(h.length<2)h.unshift(CFG.START);
+  const mn=Math.min(...h,CFG.START)*.998,mx=Math.max(...h,CFG.START)*1.002,Y=v=>8+(1-(v-mn)/(mx-mn))*92;
+  x.strokeStyle=css("--line2");x.setLineDash([3,4]);x.beginPath();x.moveTo(16,Y(CFG.START));x.lineTo(W-60,Y(CFG.START));x.stroke();x.setLineDash([]);
+  const g=x.createLinearGradient(0,0,0,100);g.addColorStop(0,"rgba(25,211,138,.35)");g.addColorStop(1,"rgba(25,211,138,0)");
+  x.beginPath();h.forEach((v,i)=>{const X=16+i/(h.length-1)*(W-76);i?x.lineTo(X,Y(v)):x.moveTo(X,Y(v))});
+  x.strokeStyle=css("--up");x.lineWidth=1.6;x.stroke();x.lineTo(W-60,100);x.lineTo(16,100);x.fillStyle=g;x.fill();
+  x.fillStyle=css("--dim");x.font="9px JetBrains Mono";x.fillText(usd(mx),W-56,14);x.fillText(usd(mn),W-56,98);
+  const ws=A.wins.slice(-120),bm=Math.max(1,...ws.map(w=>Math.abs(w.pnl)));
+  ws.forEach((w,i)=>{const X=16+i*(W-76)/120,hh=Math.abs(w.pnl)/bm*22+(w.n?1:0);x.fillStyle=w.pnl>=0?css("--up"):css("--down");
+    x.fillRect(X,w.pnl>=0?126-hh:126,Math.max(1,(W-76)/120-1),hh||1)});
+  x.fillText("PNL / WINDOW · LAST 120",16,148);
+  // calibration
+  const cb=A.calib.map(c=>{const w=A.wins.find(v=>v.start===c.start);return w?{p:c.p,y:w.up?1:0}:null}).filter(Boolean);
+  const[y,W2,H2]=ctx("c-calib");y.clearRect(0,0,W2,H2);const bins=[...Array(5)].map(()=>({n:0,y:0}));
+  cb.forEach(c=>{const b=Math.min(4,Math.floor(c.p*5));bins[b].n++;bins[b].y+=c.y});
+  bins.forEach((b,i)=>{const X=i*40+4,hh=b.n?b.y/b.n*56:0;y.fillStyle=css("--line2");y.fillRect(X,4,30,56);
+    y.fillStyle=b.n?(b.y/b.n>=.5?css("--up"):css("--down")):css("--line2");y.fillRect(X,60-hh,30,hh);
+    y.fillStyle=css("--dim");y.font="8px JetBrains Mono";y.fillText((i*20)+"-"+(i*20+20),X,69)});
+  if(cb.length){const hit=cb.filter(c=>(c.p>=.5)===(c.y===1)).length/cb.length,br=cb.reduce((a,c)=>a+(c.p-c.y)**2,0)/cb.length;
+    $("b1").style.width=hit*100+"%";$("b1t").textContent=fmt(hit*100,0)+"% / "+cb.length;$("b2").style.width=Math.min(100,br/.25*100)+"%";$("b2t").textContent=fmt(br,3)+" (coin 0.250)"}
+  const nu=A.tickets.filter(t=>t.side==="UP").length;if(A.tickets.length){$("b3").style.width=nu/A.tickets.length*100+"%";$("b3t").textContent=`${nu} / ${A.tickets.length-nu}`}}
+function drawSpot(){
+  const c=S.candles.BTC.slice(-56),p=S.px.BTC,w=S.win;if(!c.length||!p)return;
+  const[x,W,H]=ctx("c-spot");x.clearRect(0,0,W,H);const cw=W-300-60;
+  let pv=0,vv=0;c.forEach(k=>{const tp=(k.h+k.l+k.c)/3;pv+=tp*k.v;vv+=k.v});const vwap=pv/vv;
+  const sd=Math.sqrt(c.reduce((a,k)=>a+((k.h+k.l+k.c)/3-vwap)**2*k.v,0)/vv);
+  let mn=Math.min(...c.map(k=>k.l),vwap-2*sd),mx=Math.max(...c.map(k=>k.h),vwap+2*sd);const Y=v=>14+(1-(v-mn)/(mx-mn))*(H-60);
+  const bw=cw/c.length;x.fillStyle="rgba(74,168,255,.05)";x.fillRect(0,Y(vwap+2*sd),cw,Y(vwap-2*sd)-Y(vwap+2*sd));
+  x.strokeStyle=css("--dim");x.lineWidth=1.2;x.beginPath();x.moveTo(0,Y(vwap));x.lineTo(cw,Y(vwap));x.stroke();
+  const vm=Math.max(...c.map(k=>k.v));
+  c.forEach((k,i)=>{const X=i*bw+bw/2,u=k.c>=k.o;x.strokeStyle=x.fillStyle=u?css("--up"):css("--down");
+    x.beginPath();x.moveTo(X,Y(k.h));x.lineTo(X,Y(k.l));x.stroke();x.fillRect(X-bw*.32,Math.min(Y(k.o),Y(k.c)),bw*.64,Math.max(1,Math.abs(Y(k.o)-Y(k.c))));
+    x.globalAlpha=.6;const vh=k.v/vm*34;x.fillRect(X-bw*.32,H-4-vh,bw*.64,vh);x.globalAlpha=1});
+  if(w){x.strokeStyle=css("--gold");x.setLineDash([4,3]);x.beginPath();x.moveTo(0,Y(w.ptb));x.lineTo(cw,Y(w.ptb));x.stroke();x.setLineDash([]);
+    x.fillStyle=css("--gold");x.font="9px JetBrains Mono";x.fillText(`WINDOW #${w.start/CFG.WIN%10000} OPENED ${fmt(w.ptb,0)}`,4,Y(w.ptb)-4);
+    const i0=c.findIndex(k=>k.t>=w.start);if(i0>=0){x.fillStyle="rgba(245,184,61,.06)";x.fillRect(i0*bw,0,cw-i0*bw,H-44)}}
+  x.fillStyle=css("--down");if(c.at(-1).c>=c.at(-1).o)x.fillStyle=css("--up");x.fillRect(cw+2,Y(p)-9,64,18);
+  x.fillStyle="#000";x.font="bold 10px JetBrains Mono";x.fillText(fmt(p,0),cw+8,Y(p)+4);
+  x.fillStyle=css("--dim");x.font="9px JetBrains Mono";[mx,(mx+mn)/2,mn].forEach(v=>x.fillText(fmt(v,0),cw+8,Y(v)+3));
+  const o=c[0].o;$("s-px").textContent="$"+fmt(p,0);$("s-chg").textContent=sgn((p/o-1)*100,3,"%");$("s-chg").className=p>=o?"up":"down";
+  $("s-f").textContent=A.tickets.length;
+  // ladder: Polymarket UP book when we have it, else Binance spot depth
+  const bk=S.mk.bookUp,L=$("ladder");let h="";
+  if(bk&&bk.asks.length){const m=Math.max(...bk.asks.concat(bk.bids).map(a=>a[1]));
+    h+=`<div class="lr lbl"><span>UP BOOK</span><span>SHARES</span></div>`;
+    bk.asks.slice(0,6).reverse().forEach(a=>h+=`<div class="lr"><i style="width:${a[1]/m*100}%;background:var(--down)"></i><span class="down">${fmt(a[0]*100)}¢</span><span>${fmt(a[1])}</span></div>`);
+    h+=`<div class="mid"><div><div class="v">${fmt((bk.asks[0][0]+(bk.bids[0]?.[0]??bk.asks[0][0]))*50,1)}¢</div><div class="lbl">book mid</div></div><div style="text-align:right"><div class="v gold">${fmt(S.pUp*100,1)}¢</div><div class="lbl">model says up</div></div></div>`;
+    bk.bids.slice(0,6).forEach(a=>h+=`<div class="lr"><i style="width:${a[1]/m*100}%;background:var(--up)"></i><span class="up">${fmt(a[0]*100)}¢</span><span>${fmt(a[1])}</span></div>`)}
+  else{const as=S.book.asks.slice(0,6).reverse(),bs=S.book.bids.slice(0,6),m=Math.max(...as.concat(bs).map(a=>a[1]),1e-9);
+    h+=`<div class="lr lbl"><span>BTC SPOT BOOK</span><span>BTC</span></div>`;
+    as.forEach(a=>h+=`<div class="lr"><i style="width:${a[1]/m*100}%;background:var(--down)"></i><span class="down">${fmt(a[0],1)}</span><span>${fmt(a[1],3)}</span></div>`);
+    h+=`<div class="mid"><div><div class="v">${S.pUp==null?"—":fmt(S.pUp*100,1)+"¢"}</div><div class="lbl">model says up</div></div><div style="text-align:right"><div class="v gold">—</div><div class="lbl">${S.mk.status}</div></div></div>`;
+    bs.forEach(a=>h+=`<div class="lr"><i style="width:${a[1]/m*100}%;background:var(--up)"></i><span class="up">${fmt(a[0],1)}</span><span>${fmt(a[1],3)}</span></div>`)}
+  L.innerHTML=h}
+function initCards(){let h="";
+  HZ.forEach(([sec,lab])=>SYMS.forEach(s=>{h+=`<div class="card" id="cd-${s}-${sec}"><div class="t">${s} ${lab}</div><div class="v">—</div><canvas width="70" height="22"></canvas></div>`;
+    S.cards[s+sec]=[]}));
+  // 4 coins × 3 horizons = 12 cards, shown 6 per row
+  $("cards").innerHTML=h}
+function drawCards(){
+  HZ.forEach(([sec])=>SYMS.forEach(s=>{const p=S.px[s];if(!p)return;const t=now(),st=Math.floor(t/sec)*sec;
+    let o=null;if(sec<=7200){for(const k of S.candles[s])if(k.t===st){o=k.o;break}}if(o==null)return;
+    const T=st+sec-t,sd=volPerSec(s)*Math.sqrt(T),pu=Phi((Math.log(p/o)-.5*sd*sd)/sd);
+    const arr=S.cards[s+sec];arr.push(pu);if(arr.length>120)arr.shift();
+    const el=$(`cd-${s}-${sec}`);el.className="card "+(pu>=.5?"u":"d");
+    const d=arr.length>20?(pu-arr[arr.length-21])*100:0;
+    el.querySelector(".v").innerHTML=`${fmt(pu*100)}¢ <span style="font-size:9px" class="${d>=0?"up":"down"}">${d>=0?"+":""}${fmt(d)}</span>`;
+    spark(el.querySelector("canvas"),arr,pu>=.5?css("--up"):css("--down"))}))}
+function drawEngine(){
+  const[x,W,H]=ctx("c-eng"),w=S.win,p=S.px.BTC;x.clearRect(0,0,W,H);if(!w||!p||S.pUp==null)return;
+  const t=now(),end=w.start+CFG.WIN,T=end-t,nowX=W*.54,closeX=W*.72,span=420,X=tt=>nowX-(t-tt)/span*(nowX-40);
+  const P=S.paths,N=CFG.THREADS,K=CFG.STEPS;
+  const ends=[];for(let j=0;j<N;j+=8)ends.push(P[j*K+K-1]);ends.sort((a,b)=>a-b);
+  const t0=S.ticks.length?S.ticks[0].t:t;
+  const tr=S.candles.BTC.filter(k=>k.t+60>t-span&&k.t+60<t0).map(k=>({t:k.t+60,p:k.c})).concat(S.ticks.filter(a=>a.t>t-span));
+  let mn=Math.min(ends[Math.floor(ends.length*.02)],w.ptb,...tr.map(a=>a.p)),mx=Math.max(ends[Math.floor(ends.length*.98)],w.ptb,...tr.map(a=>a.p));
+  const pad=(mx-mn)*.08;mn-=pad;mx+=pad;const Y=v=>70+(1-(v-mn)/(mx-mn))*(H-160);
+  const sdC=S.sd*p||1,U=v=>.5+(v-w.ptb)/(sdC*2.2);
+  x.save();x.beginPath();x.rect(0,36,W,H-80);x.clip();
+  // grid + window boundaries
+  x.strokeStyle=css("--line");x.lineWidth=1;[w.start,end].forEach(tt=>{const xx=tt===end?closeX:X(tt);x.beginPath();x.moveTo(xx,40);x.lineTo(xx,H-50);x.stroke()});
+  // price to beat
+  x.strokeStyle="rgba(255,255,255,.18)";x.setLineDash([2,4]);x.beginPath();x.moveTo(40,Y(w.ptb));x.lineTo(W-360,Y(w.ptb));x.stroke();x.setLineDash([]);
+  x.fillStyle=css("--dim");x.font="10px JetBrains Mono";x.strokeStyle=css("--line2");
+  x.strokeRect(470,Y(w.ptb)+10,180,20);x.fillText(`PRICE TO BEAT $${fmt(w.ptb,0)}`,478,Y(w.ptb)+24);
+  // threads
+  x.globalCompositeOperation="lighter";x.lineWidth=.8;
+  for(let j=0;j<N;j++){const e=P[j*K+K-1],[r,g,b]=grad(U(e));x.strokeStyle=`rgba(${r},${g},${b},.07)`;x.beginPath();x.moveTo(nowX,Y(p));
+    for(let k=0;k<K;k++){const xx=nowX+(k+1)/K*(closeX-nowX);x.lineTo(xx,Y(P[j*K+k]))}x.stroke()}
+  // landing comb
+  for(let j=0;j<N;j+=2){const e=P[j*K+K-1],[r,g,b]=grad(U(e));x.strokeStyle=`rgba(${r},${g},${b},.18)`;x.beginPath();x.moveTo(closeX,Y(e));x.lineTo(closeX+30+Math.random()*30,Y(e));x.stroke()}
+  // glow at now
+  const pulse=1+.15*Math.sin(t*6),gr=x.createRadialGradient(nowX,Y(p),0,nowX,Y(p),70*pulse);
+  gr.addColorStop(0,"rgba(255,255,255,.95)");gr.addColorStop(.25,"rgba(255,255,255,.35)");gr.addColorStop(1,"rgba(255,255,255,0)");
+  x.fillStyle=gr;x.beginPath();x.arc(nowX,Y(p),70*pulse,0,7);x.fill();x.globalCompositeOperation="source-over";
+  // price trail
+  x.strokeStyle="#fff";x.lineWidth=1.6;x.shadowColor="rgba(255,255,255,.6)";x.shadowBlur=6;x.beginPath();
+  tr.forEach((a,i)=>i?x.lineTo(X(a.t),Y(a.p)):x.moveTo(X(a.t),Y(a.p)));x.lineTo(nowX,Y(p));x.stroke();x.shadowBlur=0;
+  x.fillStyle="rgba(10,12,14,.85)";x.fillRect(nowX-150,Y(p)-36,120,18);x.strokeRect(nowX-150,Y(p)-36,120,18);
+  x.fillStyle=css("--text");x.fillText(`NOW $${fmt(p,0)}`,nowX-144,Y(p)-23);
+  // one highlighted world
+  const j=Math.floor(t*4)%N,e=P[j*K+K-1];x.strokeStyle="#fff";x.lineWidth=1.2;x.beginPath();x.moveTo(nowX,Y(p));
+  for(let k=0;k<K;k++)x.lineTo(nowX+(k+1)/K*(closeX-nowX),Y(P[j*K+k]));x.stroke();
+  x.fillStyle="rgba(10,12,14,.9)";x.fillRect(closeX-190,Y(e)+8,150,30);x.strokeRect(closeX-190,Y(e)+8,150,30);
+  x.fillStyle=css("--text");x.fillText(`WORLD ${fmt(j*10+7)}`,closeX-184,Y(e)+21);x.fillStyle=e>w.ptb?css("--up"):css("--down");x.fillText(`CLOSES $${fmt(e,0)} ${e>w.ptb?"UP":"DOWN"}`,closeX-184,Y(e)+33);
+  // tickets: curves from the bell to the ticket rows
+  const cur=A.tickets.filter(tk=>tk.win===w.start).slice(-6).reverse();
+  cur.forEach((tk,i)=>{const yy=350+i*30+15;x.strokeStyle=tk.side==="UP"?css("--up"):css("--down");x.lineWidth=1.6;x.beginPath();
+    x.moveTo(closeX-20,Y(p));x.bezierCurveTo(closeX+40,Y(p),closeX+20,yy,W-356,yy);x.stroke();x.beginPath();x.arc(W-356,yy,4,0,7);x.fillStyle=x.strokeStyle;x.fill()});
+  x.restore();
+  // scrub bar
+  const[s,SW]=ctx("scrub");s.clearRect(0,0,SW,16);s.fillStyle=css("--line2");s.fillRect(0,7,SW,2);
+  const f=(t-w.start)/CFG.WIN;s.fillStyle=css("--text");s.fillRect(f*SW-1,2,2,12);
+  A.tickets.filter(tk=>tk.win===w.start).forEach(tk=>{s.fillStyle=tk.side==="UP"?css("--up"):css("--down");s.beginPath();s.arc((tk.t-w.start)/CFG.WIN*SW,8,4,0,7);s.fill()});
+  // DOM overlays
+  const dist=p-w.ptb;
+  $("cd").textContent=mmss(T);$("cdbar").firstChild.style.width=(1-T/CFG.WIN)*100+"%";
+  $("e-wid").textContent="#"+(w.start/CFG.WIN%10000)+(w.partial?" · joined late":"");
+  $("e-ptb").textContent="$"+fmt(w.ptb,0);$("e-now").textContent="$"+fmt(p,0);
+  $("e-dist").textContent=`${dist>=0?"+":"-"}$${fmt(Math.abs(dist),0)} ${sgn(dist/(S.sd*p)||0,2,"σ")}`;$("e-dist").className=dist>=0?"up":"down";
+  $("e-up").textContent=fmt(S.pUp*100,1)+"%";$("e-down").textContent=fmt((1-S.pUp)*100,1)+"%";
+  const mk=S.mk;$("e-book").textContent=mk.askUp==null?`BOOK — (${mk.status})`:`BOOK ${fmt(mk.askUp*100)}¢`;
+  const eg=mk.askUp==null?null:S.pUp-mk.askUp;$("e-edge").textContent=eg==null?"EDGE —":`EDGE ${sgn(eg*100)} ${eg>=0?"UP":"DOWN"}`;
+  $("e-sig").textContent="$"+fmt(S.sd*p,0);$("e-dr").textContent=(dist>=0?"+":"-")+"$"+fmt(Math.abs(dist),0);
+  const ev=cur.reduce((a,tk)=>a+((tk.side==="UP"?S.pUp:1-S.pUp)*tk.shares-tk.stake-tk.fee),0);$("e-ev").textContent="EV "+usd(ev);
+  $("tix-in").innerHTML=cur.map(tk=>{const mark=(tk.side==="UP"?S.pUp:1-S.pUp)*tk.shares-tk.stake-tk.fee,c=tk.side==="UP"?"up":"down";
+    return`<div class="tr"><span class="${c}">BUY ${tk.side}</span><div><div style="display:flex;justify-content:space-between"><span>${tk.shares} @ ${fmt(tk.price*100)}¢</span><span class="dim">edge ${sgn(tk.edge*100)}</span></div><div class="m"><i style="width:${tk.price*100}%;background:var(--${c})"></i></div></div><span class="${mark>=0?"up":"down"}" style="text-align:right">${usd(mark)}</span></div>`}).join("")||`<div class="dim">no tickets yet${mk.askUp==null?" — waiting for a live book":""}</div>`;
+  // ticket birth steps
+  const st=stepState;$("bn-w").textContent="window #"+(w.start/CFG.WIN%10000);
+  $("bv1").textContent=fmt(S.pUp*100,1)+"¢ up";$("bv2").textContent=st.cmp||"—";$("bv3").textContent=st.size||"—";
+  const lt=cur[0];$("bv4").textContent=lt?`${lt.shares} ${lt.side.toLowerCase()} @ ${fmt(lt.price*100)}¢`:"—";$("bv5").textContent="in "+mmss(T);
+  for(let i=0;i<6;i++)$("bs"+i).className="s"+(i<=Math.max(st.step||0,lt?5:0)?" on":"");
+  // settle banner
+  const sh=S.settleShow;$("settled").style.display=sh&&t<sh.until?"block":"none";
+  if(sh&&t<sh.until){$("st-a").textContent="SETTLED "+(sh.up?"UP":"DOWN");$("st-a").className="a "+(sh.up?"up":"down");
+    $("st-b").textContent=(sh.n?`${usd(sh.pnl)} ON THIS WINDOW · ${sh.n} TICKETS`:"NO TICKETS THIS WINDOW")+" · BY "+(sh.src||"").toUpperCase()}}
+function drawFills(){
+  const[x,W,H]=ctx("c-fills"),t=now(),span=1800,X=tt=>12+(1-(t-tt)/span)*(W-150);x.clearRect(0,0,W,H);
+  A.wins.filter(w=>w.start>t-span).forEach(w=>{x.fillStyle=w.n?(w.pnl>=0?css("--up"):css("--down")):css("--line2");x.globalAlpha=w.n?.8:.6;
+    x.fillRect(X(w.start),4,Math.max(2,CFG.WIN/span*(W-150)-2),12)});x.globalAlpha=1;
+  x.strokeStyle=css("--line2");x.beginPath();x.moveTo(12,70);x.lineTo(W-138,70);x.stroke();
+  A.tickets.filter(tk=>tk.t>t-span).forEach(tk=>{const a=X(tk.t),b=X(Math.min(t,tk.win+CFG.WIN)),u=tk.side==="UP";
+    x.strokeStyle=u?css("--blue"):css("--down");x.setLineDash([3,3]);x.lineWidth=1.2;x.beginPath();x.moveTo(a,70);
+    x.quadraticCurveTo((a+b)/2,u?70-Math.min(46,(b-a)*.5+8):70+Math.min(36,(b-a)*.5+8),b,70);x.stroke();x.setLineDash([]);
+    x.fillStyle=x.strokeStyle;x.beginPath();x.arc(a,70,3.5,0,7);x.fill()});
+  x.fillStyle=css("--gold");x.beginPath();x.arc(X(t),70,5,0,7);x.fill();
+  const w=S.win,cur=w?A.tickets.filter(tk=>tk.win===w.start):[],u=cur.filter(tk=>tk.side==="UP").reduce((a,b)=>a+b.shares,0),d=cur.filter(tk=>tk.side==="DOWN").reduce((a,b)=>a+b.shares,0);
+  $("pos").innerHTML=`<div class="lbl">POSITION</div><div style="display:flex;gap:8px;margin-top:6px"><div style="width:6px;height:70px;background:var(--line2);position:relative"><i style="position:absolute;bottom:0;left:0;right:0;height:${u+d?u/(u+d)*100:0}%;background:var(--blue)"></i></div><div><div class="v" style="font-size:15px">${fmt(u)}</div><div class="lbl">UP</div><div class="v down" style="font-size:15px;margin-top:8px">${fmt(d)}</div><div class="lbl">DOWN</div></div></div>`;
+  const today=Math.floor(t/86400)*86400;$("f-open").textContent=A.tickets.filter(tk=>!tk.settled).length+" OPEN";$("f-today").textContent=A.tickets.filter(tk=>tk.t>=today).length+" TODAY";
+  $("ftab").innerHTML=A.tickets.slice(-6).reverse().map(tk=>`<div class="fr"><span class="dim">${hms(tk.t)}</span><span class="${tk.side==="UP"?"up":"down"}">BUY ${tk.side}</span><span>${tk.shares} @ ${fmt(tk.price*100)}¢</span><span>${sgn(tk.edge*100)}</span><span class="${!tk.settled?"dim":tk.pnl>=0?"up":"down"}" style="text-align:right">${tk.settled?usd(tk.pnl):"open"}</span></div>`).join("")}
+function drawMvm(){
+  const[x,W,H]=ctx("c-mvm"),w=S.win;x.clearRect(0,0,W,H);if(!w)return;
+  const X=t=>14+(t-w.start)/CFG.WIN*(W-60),Y=v=>8+(1-v)*(H-28);
+  x.strokeStyle=css("--line");[0,.25,.5,.75,1].forEach(v=>{x.beginPath();x.moveTo(14,Y(v));x.lineTo(W-46,Y(v));x.stroke();x.fillStyle=css("--dim");x.font="9px JetBrains Mono";x.fillText(v*100+"¢",W-40,Y(v)+3)});
+  const line=(k,col,lw)=>{x.strokeStyle=col;x.lineWidth=lw;x.beginPath();let s=false;w.hist.forEach(h=>{if(h[k]==null){s=false;return}s?x.lineTo(X(h.t),Y(h[k])):x.moveTo(X(h.t),Y(h[k]));s=true});x.stroke()};
+  line("k",css("--gold"),1.4);line("m",css("--text"),1.4);
+  A.tickets.filter(tk=>tk.win===w.start).forEach(tk=>{x.fillStyle=tk.side==="UP"?css("--up"):css("--down");x.beginPath();x.moveTo(X(tk.t),Y(tk.price)-6);x.lineTo(X(tk.t)-4,Y(tk.price)-12);x.lineTo(X(tk.t)+4,Y(tk.price)-12);x.fill()});
+  const mk=S.mk;$("m-left").textContent=mmss(w.start+CFG.WIN-now())+" LEFT";
+  $("m-sub").innerHTML=`BTC 5M #${w.start/CFG.WIN%10000} &nbsp; MODEL <b style="color:var(--text)">${fmt(S.pUp*100,1)}</b> &nbsp; <span class="gold">MKT ${mk.askUp==null?"—":fmt(mk.askUp*100,1)}</span> &nbsp; EDGE ${mk.askUp==null?"—":sgn((S.pUp-mk.askUp)*100)}`}
+function drawLand(){
+  const[x,W,H]=ctx("c-land"),w=S.win,p=S.px.BTC;x.clearRect(0,0,W,H);if(!w||S.pUp==null)return;
+  const t=S.term,sdC=S.sd*p,lo=p-3.2*sdC,hi=p+3.2*sdC,B=64,b=new Array(B).fill(0);
+  for(let i=0;i<t.length;i++){const k=Math.floor((t[i]-lo)/(hi-lo)*B);if(k>=0&&k<B)b[k]++}
+  const m=Math.max(...b),bw=(W-28)/B,X=v=>14+(v-lo)/(hi-lo)*(W-28),U=v=>.5+(v-w.ptb)/(sdC*2.2);
+  x.font="bold 20px Space Grotesk";x.fillStyle=css("--down");x.fillText(fmt((1-S.pUp)*100,1)+"%",14,24);
+  x.fillStyle=css("--blue");const s2=fmt(S.pUp*100,1)+"%";x.fillText(s2,W-14-x.measureText(s2).width,24);
+  const sp=14+(1-S.pUp)*(W-28),g=x.createLinearGradient(14,0,W-14,0);GR.forEach((c,i)=>g.addColorStop(i/(GR.length-1),`rgb(${c})`));
+  x.fillStyle=g;x.fillRect(14,34,W-28,4);x.fillStyle="#fff";x.fillRect(sp-1,30,2,12);
+  b.forEach((n,i)=>{const v=lo+(i+.5)*(hi-lo)/B,[r,gg,bb]=grad(U(v)),hh=n/m*(H-74);
+    for(let d=0;d<hh;d+=5){x.fillStyle=`rgba(${r},${gg},${bb},${.35+.65*d/hh})`;x.fillRect(14+i*bw+1,H-18-d-3,bw-2,3)}});
+  x.strokeStyle="#fff";x.setLineDash([2,3]);x.beginPath();x.moveTo(X(w.ptb),46);x.lineTo(X(w.ptb),H-16);x.stroke();x.setLineDash([]);
+  x.fillStyle=css("--dim");x.font="9px JetBrains Mono";x.fillText(`BEAT $${fmt(w.ptb,0)}`,X(w.ptb)+4,58);x.fillText(`NOW $${fmt(p,0)}`,X(p)+4,70);
+  $("l-n").textContent=fmt(S.landed)+" LANDED"}
+
+/* ---------- position history ---------- */
+const jst=t=>new Date(t*1000).toLocaleString("ja-JP",{timeZone:"Asia/Tokyo",month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit",second:"2-digit"});
+const jhm=t=>new Date(t*1000).toLocaleTimeString("ja-JP",{timeZone:"Asia/Tokyo",hour:"2-digit",minute:"2-digit"});
+let hFilter="all",hLimit=100;
+document.querySelectorAll("#hbar button[data-f]").forEach(b=>b.onclick=()=>{hFilter=b.dataset.f;hLimit=100;
+  document.querySelectorAll("#hbar button[data-f]").forEach(x=>x.classList.toggle("on",x===b));drawHist.k=null;drawHist()});
+function histRows(){const W={};A.wins.forEach(w=>W[w.start]=w);
+  return A.tickets.slice().reverse().map(t=>({t,w:W[t.win]})).filter(({t})=>hFilter==="all"||(hFilter==="open"?!t.settled:hFilter==="win"?t.settled&&t.won:t.settled&&!t.won))}
+function drawHist(){
+  const key=[A.tickets.length,A.tickets.filter(t=>t.settled).length,hFilter,hLimit,A.cash].join();if(key===drawHist.k)return;drawHist.k=key;
+  const set=A.tickets.filter(t=>t.settled),win=set.filter(t=>t.won).length,pnl=set.reduce((a,t)=>a+t.pnl,0),open=A.tickets.filter(t=>!t.settled);
+  const cell=(k,v,c="")=>`<div><div class="k">${k}</div><div class="v ${c}">${v}</div></div>`;
+  $("hsum").innerHTML=cell("仮想資金",usd(equity(),2))+cell("確定した損益",usd(pnl,2),pnl>=0?"up":"down")+cell("売買回数",fmt(A.tickets.length)+" 回")
+    +cell("勝ち / 負け",`${win} / ${set.length-win}`)+cell("勝率",set.length?fmt(win/set.length*100,1)+"%":"—")+cell("持ち中",open.length+" 件 · "+usd(open.reduce((a,t)=>a+t.stake,0)));
+  const rows=histRows();
+  $("hbody").innerHTML=rows.slice(0,hLimit).map(({t,w})=>{
+    const side=t.side==="UP"?'<span class="up">上</span>':'<span class="down">下</span>';
+    const res=!t.settled?'<span class="dim">持ち中</span>':`${t.won?'<span class="up">勝ち</span>':'<span class="down">負け</span>'}${w?` <span class="dim">${fmt(w.ptb,0)}→${fmt(w.final,0)} · ${t.src==="polymarket"?"Polymarket の結果":"Binance で判定"}</span>`:""}`;
+    return`<tr><td>${jst(t.t)}</td><td>${jhm(t.win)}〜${jhm(t.win+CFG.WIN)}</td><td>${side}</td><td class="n">${fmt(t.shares)}</td><td class="n">${fmt(t.price*100,1)}¢</td>
+      <td class="n">${usd(t.stake+t.fee,2)}</td><td class="n">${fmt((t.side==="UP"?t.model:1-t.model)*100,1)}%</td><td class="n">${sgn(t.edge*100)}</td><td>${res}</td>
+      <td class="n ${!t.settled?"dim":t.pnl>=0?"up":"down"}">${t.settled?usd(t.pnl,2):"—"}</td></tr>`}).join("")
+    ||`<tr><td colspan="10" style="text-align:center;padding:24px;font-family:system-ui" class="dim">まだ売買はありません。Polymarket の板が取れて、有利な値段が出たときに買います。</td></tr>`;
+  $("hmore").innerHTML=rows.length>hLimit?`<button onclick="hLimit+=100;drawHist()" style="font:inherit;padding:6px 12px;background:var(--panel);color:var(--text);border:1px solid var(--line2);border-radius:4px">さらに表示（残り ${rows.length-hLimit} 件）</button>`:""}
+$("hcsv").onclick=()=>{const W={};A.wins.forEach(w=>W[w.start]=w);
+  const head="買った時刻(UTC),窓の開始(UTC),向き,枚数,買値,支払い(手数料込),予想確率,有利さ,結果,基準の値段,終わりの値段,損益\n";
+  const body=A.tickets.map(t=>{const w=W[t.win];return[new Date(t.t*1000).toISOString(),new Date(t.win*1000).toISOString(),t.side==="UP"?"上":"下",t.shares,t.price,(t.stake+t.fee).toFixed(2),
+    (t.side==="UP"?t.model:1-t.model).toFixed(4),t.edge.toFixed(4),t.settled?(t.won?"勝ち":"負け"):"持ち中",w?w.ptb:"",w?w.final:"",t.settled?t.pnl.toFixed(2):""].join(",")}).join("\n");
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+head+body],{type:"text/csv"}));a.download="btcbot-history.csv";a.click()};
+
+/* ---------- the 24h bot's wallet (read-only) ---------- */
+async function pullDesk(){
+  try{const r=await fetch(DESK_URL+"?t="+Date.now(),{cache:"no-store"});if(!r.ok)throw new Error(r.status===404?"まだ一度も動いていません":"HTTP "+r.status);
+    const j=await r.json();const prev=A.wins?A.wins.length:0;A=j;A.pend=A.pend||[];
+    if(A.wins.length>prev&&prev){const w=A.wins.at(-1);S.settleShow={until:now()+5,up:w.up,pnl:w.pnl,n:w.n,src:w.src}}
+    const st=A.status||{},age=st.updated?Math.round(now()-st.updated):null;
+    diag("24時間ボット",age!=null&&age<180,age==null?"状態がありません":`${age}秒前に更新 · 判断: ${st.last_decision||"—"} · 市場: ${st.market||"—"} · 板: ${st.book||"—"}`)}
+  catch(e){diag("24時間ボット",false,"読めません ("+(e.message||e)+")")}}
+function drawBroke(){let el=$("broke");if(!el){el=document.createElement("div");el.id="broke";
+    el.style.cssText="position:absolute;left:50%;top:300px;transform:translateX(-50%);z-index:5;background:rgba(10,12,14,.94);border:1px solid var(--down);padding:22px 40px;text-align:center;display:none";
+    el.innerHTML='<div style="font-family:var(--sans);font-size:44px;font-weight:700;color:var(--down)">BUSTED · $0</div><div class="lbl" id="broke-b" style="margin-top:8px;font-size:11px"></div>';$("engine").appendChild(el)}
+  el.style.display=SERVER&&A.broke?"block":"none";
+  if(A.broke){const n=A.tickets.length,h=A.broke_at&&A.started?(A.broke_at-A.started)/3600:null;
+    $("broke-b").textContent=`${n} TICKETS${h!=null?` · ${h.toFixed(1)} HOURS`:""} · RESET FROM GITHUB ACTIONS → DESK`}}
+
+/* ---------- loop ---------- */
+function fit(){const on=$("t-fit").classList.contains("on"),s=on?Math.min(1,window.innerWidth/1600):1;
+  $("desk").style.transform=`scale(${s})`;$("stage").style.height=$("desk").offsetHeight*s+"px";$("stage").style.overflowX=on?"hidden":"auto"}
+$("t-fit").onclick=e=>{e.target.classList.toggle("on");fit()};
+$("t-dark").onclick=e=>{e.target.classList.toggle("on");document.documentElement.dataset.theme=e.target.classList.contains("on")?"dark":"light"};
+window.addEventListener("resize",fit);
+function frame(){try{drawHeader();drawEngine();drawMvm();drawLand()}catch(e){console.error(e)}}
+function slow(){try{drawBroke();drawTicker();drawPnl();drawSpot();drawCards();drawFills();drawHist()}catch(e){console.error(e)}}
+async function boot(){
+  initCards();fit();
+  if(SIM){startSim();diag("デモ",true,"作り物のデータで動いています")}else startLive();
+  if(SERVER){pullDesk();setInterval(pullDesk,20000)}
+  setInterval(()=>{rollWindow();simulate();frame()},CFG.TICK);
+  setInterval(slow,1000);if(!SERVER)setInterval(settlePending,SIM?1000:10000);setInterval(pollBook,SIM?500:2000);
+  $("ft-ver").textContent=SIM?"DEMO MODE — NUMBERS ARE SYNTHETIC":""}
+$("mode-note").textContent=SIM?"デモ（作り物のデータ）":SERVER?"24時間ボット。GitHub Actions の上で、ページを閉じていても売買を続けます。$1,000 から始めて、$0 になるまで止まりません。この画面はその結果を20秒ごとに読んで表示しています（値動きの絵はこのブラウザで計算）。":"このブラウザだけのボット（?local=1）。ページを開いている間だけ動きます。";
+boot();
+</script>
+</body>
+</html>
