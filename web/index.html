@@ -276,6 +276,7 @@ canvas{display:block}
 
 <div id="help">
   <h2>これは何？</h2>
+  <p><b>いまの表示：</b><span id="mode-note"></span></p>
   <p>「5分後に BTC が今より上か下か」に賭ける予測市場（Polymarket の BTC Up or Down 5m）向けのボットを、<b>仮想のお金だけ</b>で動かす画面です。このページを開いている間、ブラウザの中でボットが動きます。</p>
   <p>・BTC の値段は Binance の公開データを使います。<br>
   ・1秒に4回、5分足の終わりまでの値動きを 20,480 通りシミュレーションし、「上で終わる確率」を出します。<br>
@@ -291,7 +292,9 @@ canvas{display:block}
 <script>
 "use strict";
 const CFG={WIN:300,WORLDS:20480,THREADS:2048,STEPS:24,TICK:250,MIN_EDGE:.04,FEE:.01,KELLY:.25,TICKET_CAP:25,WINDOW_CAP:100,COOLDOWN:15,START:1000,MIN_LEFT:15,MIN_PRICE:.10,MAX_PRICE:.90,MAX_EDGE:.15};
-const SIM=new URLSearchParams(location.search).has("sim");
+const QS=new URLSearchParams(location.search),SIM=QS.has("sim");
+const SERVER=!SIM&&!QS.has("local");   // default: show the 24h bot that runs on GitHub Actions
+const DESK_URL="https://raw.githubusercontent.com/takochi92/btcbot/desk-data/desk.json";
 const SYMS=["BTC","ETH","SOL","XRP"],HZ=[[300,"5M"],[900,"15M"],[3600,"1H"]];
 const $=id=>document.getElementById(id);
 const fmt=(n,d=0)=>n==null||isNaN(n)?"—":n.toLocaleString("en-US",{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -313,8 +316,8 @@ const KEY="btcbot.paper.v2";
 function freshAcct(){return{cash:CFG.START,tickets:[],hist:[{t:now(),eq:CFG.START}],calib:[],wins:[],pend:[]}}
 let A=freshAcct();
 try{const j=JSON.parse(localStorage.getItem(KEY)||"null");if(j&&j.cash!=null)A=j}catch(e){}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(A))}catch(e){}}
-$("reset").onclick=()=>{if(confirm("仮想資金と記録を消して $1,000 からやり直しますか？")){A=freshAcct();save()}};
+function save(){if(SERVER)return;try{localStorage.setItem(KEY,JSON.stringify(A))}catch(e){}}
+$("reset").onclick=()=>{if(SERVER){alert("24時間ボットのやり直しは GitHub の Actions → desk → Run workflow で reset を true にして実行します。");return}if(confirm("仮想資金と記録を消して $1,000 からやり直しますか？")){A=freshAcct();save()}};
 
 /* ---------- math ---------- */
 let spare=null;
@@ -450,7 +453,7 @@ async function settlePending(){
 function rollWindow(){
   const t=now(),start=Math.floor(t/CFG.WIN)*CFG.WIN,p=S.px.BTC;if(!p)return;
   if(S.win&&start===S.win.start)return;
-  if(S.win){A.pend=A.pend||[];A.pend.push({start:S.win.start,ptb:S.win.ptb,partial:S.win.partial,simFinal:SIM?p:null});save()}
+  if(S.win&&!SERVER){A.pend=A.pend||[];A.pend.push({start:S.win.start,ptb:S.win.ptb,partial:S.win.partial,simFinal:SIM?p:null});save()}
   // price to beat = the real open of this window. If we woke up late and can't read it, only watch.
   const o=openAt("BTC",start),fresh=t-start<3&&S.ticks.length&&t-S.ticks.at(-1).t<2;
   newWindow(start,o??p,o==null&&!fresh)}function simulate(){
@@ -481,6 +484,7 @@ function maybeTrade(T){
   if(T<CFG.MIN_LEFT||T>CFG.WIN-5){st.size="too close to the bell";return}
   if(spent>=CFG.WINDOW_CAP){st.size="window cap reached";return}
   if(now()-lastTicket<CFG.COOLDOWN){st.size="cooling down";st.step=3;return}
+  if(SERVER){st.size="the 24h bot decides on the server";return}
   const f=edge/(1-ask)*CFG.KELLY;let stake=Math.min(A.cash*f,CFG.TICKET_CAP,CFG.WINDOW_CAP-spent,A.cash);
   if(stake<1){st.size="too small";return}
   const shares=Math.floor(stake/ask);stake=shares*ask;const fee=shares*CFG.FEE;
@@ -509,7 +513,9 @@ function drawHeader(){
   $("h-win").textContent=w?"window #"+(w.start/CFG.WIN%10000):"window";
   $("h-feed").textContent="feed "+S.feed;
   const ok=(S.feed==="binance"||S.feed==="coinbase"||S.feed==="SIM")&&S.px.BTC;
-  $("status").textContent=SIM?"● DEMO · SIM DATA":ok?"● PAPER DESK ONLINE":"● FEED "+S.feed.toUpperCase();$("status").className=ok&&!SIM?"":"bad";
+  const age=SERVER&&A.status&&A.status.updated?now()-A.status.updated:null;
+  $("status").textContent=SIM?"● DEMO · SIM DATA":SERVER?(A.broke?"● BUSTED · $0":age==null?"● WAITING FOR 24H BOT":age<180?`● 24H BOT LIVE · ${Math.round(age)}s AGO`:"● 24H BOT PAUSED"):ok?"● PAPER DESK ONLINE":"● FEED "+S.feed.toUpperCase();
+  $("status").className=(SERVER?(age!=null&&age<180&&!A.broke):(ok&&!SIM))?"":"bad";
   $("ft-src").textContent=`PRICES: ${SIM?"SIM":S.feed.toUpperCase()} · BOOK: ${mk.status.toUpperCase()}`;$("ft-s").textContent=ok?"ONLINE":"OFFLINE"}
 function drawTicker(){
   const w=S.win;const cur=w?A.tickets.filter(t=>t.win===w.start):[];
@@ -733,6 +739,21 @@ $("hcsv").onclick=()=>{const W={};A.wins.forEach(w=>W[w.start]=w);
     (t.side==="UP"?t.model:1-t.model).toFixed(4),t.edge.toFixed(4),t.settled?(t.won?"勝ち":"負け"):"持ち中",w?w.ptb:"",w?w.final:"",t.settled?t.pnl.toFixed(2):""].join(",")}).join("\n");
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+head+body],{type:"text/csv"}));a.download="btcbot-history.csv";a.click()};
 
+/* ---------- the 24h bot's wallet (read-only) ---------- */
+async function pullDesk(){
+  try{const r=await fetch(DESK_URL+"?t="+Date.now(),{cache:"no-store"});if(!r.ok)throw new Error(r.status===404?"まだ一度も動いていません":"HTTP "+r.status);
+    const j=await r.json();const prev=A.wins?A.wins.length:0;A=j;A.pend=A.pend||[];
+    if(A.wins.length>prev&&prev){const w=A.wins.at(-1);S.settleShow={until:now()+5,up:w.up,pnl:w.pnl,n:w.n,src:w.src}}
+    const st=A.status||{},age=st.updated?Math.round(now()-st.updated):null;
+    diag("24時間ボット",age!=null&&age<180,age==null?"状態がありません":`${age}秒前に更新 · 判断: ${st.last_decision||"—"} · 市場: ${st.market||"—"} · 板: ${st.book||"—"}`)}
+  catch(e){diag("24時間ボット",false,"読めません ("+(e.message||e)+")")}}
+function drawBroke(){let el=$("broke");if(!el){el=document.createElement("div");el.id="broke";
+    el.style.cssText="position:absolute;left:50%;top:300px;transform:translateX(-50%);z-index:5;background:rgba(10,12,14,.94);border:1px solid var(--down);padding:22px 40px;text-align:center;display:none";
+    el.innerHTML='<div style="font-family:var(--sans);font-size:44px;font-weight:700;color:var(--down)">BUSTED · $0</div><div class="lbl" id="broke-b" style="margin-top:8px;font-size:11px"></div>';$("engine").appendChild(el)}
+  el.style.display=SERVER&&A.broke?"block":"none";
+  if(A.broke){const n=A.tickets.length,h=A.broke_at&&A.started?(A.broke_at-A.started)/3600:null;
+    $("broke-b").textContent=`${n} TICKETS${h!=null?` · ${h.toFixed(1)} HOURS`:""} · RESET FROM GITHUB ACTIONS → DESK`}}
+
 /* ---------- loop ---------- */
 function fit(){const on=$("t-fit").classList.contains("on"),s=on?Math.min(1,window.innerWidth/1600):1;
   $("desk").style.transform=`scale(${s})`;$("stage").style.height=$("desk").offsetHeight*s+"px";$("stage").style.overflowX=on?"hidden":"auto"}
@@ -740,13 +761,15 @@ $("t-fit").onclick=e=>{e.target.classList.toggle("on");fit()};
 $("t-dark").onclick=e=>{e.target.classList.toggle("on");document.documentElement.dataset.theme=e.target.classList.contains("on")?"dark":"light"};
 window.addEventListener("resize",fit);
 function frame(){try{drawHeader();drawEngine();drawMvm();drawLand()}catch(e){console.error(e)}}
-function slow(){try{drawTicker();drawPnl();drawSpot();drawCards();drawFills();drawHist()}catch(e){console.error(e)}}
+function slow(){try{drawBroke();drawTicker();drawPnl();drawSpot();drawCards();drawFills();drawHist()}catch(e){console.error(e)}}
 async function boot(){
   initCards();fit();
   if(SIM){startSim();diag("デモ",true,"作り物のデータで動いています")}else startLive();
+  if(SERVER){pullDesk();setInterval(pullDesk,20000)}
   setInterval(()=>{rollWindow();simulate();frame()},CFG.TICK);
-  setInterval(slow,1000);setInterval(settlePending,SIM?1000:10000);setInterval(pollBook,SIM?500:2000);
+  setInterval(slow,1000);if(!SERVER)setInterval(settlePending,SIM?1000:10000);setInterval(pollBook,SIM?500:2000);
   $("ft-ver").textContent=SIM?"DEMO MODE — NUMBERS ARE SYNTHETIC":""}
+$("mode-note").textContent=SIM?"デモ（作り物のデータ）":SERVER?"24時間ボット。GitHub Actions の上で、ページを閉じていても売買を続けます。$1,000 から始めて、$0 になるまで止まりません。この画面はその結果を20秒ごとに読んで表示しています（値動きの絵はこのブラウザで計算）。":"このブラウザだけのボット（?local=1）。ページを開いている間だけ動きます。";
 boot();
 </script>
 </body>

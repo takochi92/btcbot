@@ -1,0 +1,30 @@
+name: desk
+# 5分足 BTC Up/Down の仮想売買ボット。約6時間ずつ交代で、$0 になるまで売買を続ける。
+on:
+  schedule:
+    - cron: "7 * * * *"   # 毎時。動いている間は待ち、終わったらすぐ次が始まる
+  workflow_dispatch:
+    inputs:
+      reset:
+        description: "true にすると $1,000 からやり直す"
+        default: "false"
+permissions:
+  contents: write
+concurrency:
+  group: desk
+  cancel-in-progress: ${{ inputs.reset == 'true' }}
+jobs:
+  desk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests
+      - run: python -m btcbot.desk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RESET: ${{ inputs.reset }}
+          RUN_SECONDS: "20700"
