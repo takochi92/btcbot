@@ -1,0 +1,21 @@
+{
+  "cash": 0.0,
+  "btc": 0.12031816867150856,
+  "peak_equity": 10000.0,
+  "last_equity": 9985.007496251874,
+  "day": "2026-10-11",
+  "halted": false,
+  "halt_reason": "",
+  "halt_permanent": false,
+  "consecutive_losses": 0,
+  "api_errors": 0,
+  "entry_value": 10000.0,
+  "closed_trades": [],
+  "fills": [
+    {
+      "date": "2026-10-10",
+      "side": "buy",
+      "price": 83029.85418
+    }
+  ]
+}
