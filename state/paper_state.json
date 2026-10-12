@@ -1,9 +1,9 @@
 {
   "cash": 0.0,
   "btc": 0.12031816867150856,
-  "peak_equity": 10000.0,
-  "last_equity": 9985.007496251874,
-  "day": "2026-10-11",
+  "peak_equity": 10079.428382298527,
+  "last_equity": 10079.428382298527,
+  "day": "2026-10-12",
   "halted": false,
   "halt_reason": "",
   "halt_permanent": false,
@@ -15,7 +15,8 @@
     {
       "date": "2026-10-10",
       "side": "buy",
-      "price": 83029.85418
+      "price": 83029.85418,
+      "markout_1d": 0.008951790019872563
     }
   ]
 }
