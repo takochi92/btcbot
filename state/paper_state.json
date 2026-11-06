@@ -1,16 +1,18 @@
 {
-  "cash": 0.0,
-  "btc": 0.12031816867150856,
+  "cash": 9141.042443412853,
+  "btc": 0.0,
   "peak_equity": 10117.966291724011,
-  "last_equity": 9686.095053912812,
-  "day": "2026-11-05",
-  "halted": false,
-  "halt_reason": "",
+  "last_equity": 9141.042443412853,
+  "day": "2026-11-06",
+  "halted": true,
+  "halt_reason": "daily_loss",
   "halt_permanent": false,
-  "consecutive_losses": 0,
+  "consecutive_losses": 1,
   "api_errors": 0,
-  "entry_value": 10000.0,
-  "closed_trades": [],
+  "entry_value": 0.0,
+  "closed_trades": [
+    -0.08589575565871477
+  ],
   "fills": [
     {
       "date": "2026-10-10",
@@ -18,6 +20,11 @@
       "price": 83029.85418,
       "markout_1d": 0.008951790019872563,
       "markout_3d": 0.001675852876946493
+    },
+    {
+      "date": "2026-11-05",
+      "side": "sell",
+      "price": 76049.965995
     }
   ]
 }
