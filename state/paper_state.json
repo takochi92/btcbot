@@ -3,9 +3,9 @@
   "btc": 0.0,
   "peak_equity": 10117.966291724011,
   "last_equity": 9141.042443412853,
-  "day": "2026-11-06",
-  "halted": true,
-  "halt_reason": "daily_loss",
+  "day": "2026-11-07",
+  "halted": false,
+  "halt_reason": "",
   "halt_permanent": false,
   "consecutive_losses": 1,
   "api_errors": 0,
@@ -24,7 +24,8 @@
     {
       "date": "2026-11-05",
       "side": "sell",
-      "price": 76049.965995
+      "price": 76049.965995,
+      "markout_1d": 0.0027082983181550002
     }
   ]
 }
