@@ -29,3 +29,4 @@
 {"time": "2026-11-08T05:59:45.872708", "bar": "2026-11-07", "price": 75867.59, "signal": 0.0, "risk": "ok", "action": "hold", "equity": 9141.042443412853, "halted": false, "halt_reason": ""}
 {"time": "2026-11-09T06:26:24.878694", "bar": "2026-11-08", "price": 74851.44, "signal": 0.0, "risk": "ok", "action": "hold", "equity": 9141.042443412853, "halted": false, "halt_reason": ""}
 {"time": "2026-11-10T07:17:28.604637", "bar": "2026-11-09", "price": 75368.41, "signal": 0.0, "risk": "ok", "action": "hold", "equity": 9141.042443412853, "halted": false, "halt_reason": ""}
+{"time": "2026-11-11T06:18:56.944656", "bar": "2026-11-10", "price": 73796.06, "signal": 0.0, "risk": "ok", "action": "hold", "equity": 9141.042443412853, "halted": false, "halt_reason": ""}
